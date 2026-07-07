@@ -1,0 +1,6 @@
+{
+  "name": "Nabih AI",
+  "description": "Nabih AI is an ultra-premium, minimalist AI companion powered by advanced Gemini models, featuring multi-modal understanding, voice conversation, and English/Arabic support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
