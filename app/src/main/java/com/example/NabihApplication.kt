@@ -1,8 +1,9 @@
 package com.example
 
+import com.example.core.di.AppContainer
+import com.example.core.di.DefaultAppContainer
+
 import android.app.Application
-import com.example.data.di.AppContainer
-import com.example.data.di.DefaultAppContainer
 
 class NabihApplication : Application() {
     lateinit var container: AppContainer

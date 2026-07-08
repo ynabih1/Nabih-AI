@@ -1,21 +1,42 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Nabih AI
 
-# Run and deploy your AI Studio app
+Nabih AI is a professional, high-performance Android AI assistant built using Kotlin, Jetpack Compose, and modern Android architecture. Designed with a clean Material 3 user interface, the application offers a cohesive, highly responsive experience with native support for both English and Arabic languages.
 
-This contains everything you need to run your app locally.
+## Project Description
 
-View your app in AI Studio: https://ai.studio/apps/6b0f9c56-1438-4d1b-b136-0ef25725d9ec
+Nabih AI functions as a central portal for communicating with advanced artificial intelligence models. It provides users with direct, configurable access to multiple leading AI engines, including Gemini, ChatGPT, Claude, and specialized Nabih models. The application emphasizes local control, allowing users to safely manage and input their own API credentials directly on-device.
 
-## Run Locally
+## Core Features
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+- **Multi-Model Support:** Configure and switch seamlessly between Gemini, ChatGPT, Claude, and Nabih Ultra models.
+- **Material 3 Design:** Built entirely with Jetpack Compose following Material 3 guidelines, featuring beautiful, eye-safe dark layouts, smooth transitions, and dynamic components.
+- **Bilingual Experience:** Full localized interface and navigation support for both English and Arabic languages.
+- **Voice & Chat Assistant:** Responsive, low-latency text and voice interactions with conversational memory retention.
+- **Secure Key Storage:** Local settings architecture that securely handles and stores user API keys on-device without exposing them.
+- **Clean Architecture & MVVM:** Structured following modern Android practices using repositories, custom ViewModels, Room database for local state persistence, and Kotlin Coroutines/Flows.
 
+## Installation
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+1. **Prerequisites:**
+   - Android Studio (Ladybug or newer)
+   - Android SDK 34+
+   - Gradle 8.0+
+
+2. **Clone the Repository:**
+   ```bash
+   git clone https://github.com/ynabihx/nabih-ai.git
+   cd nabih-ai
+   ```
+
+3. **Configure API Keys:**
+   - Define credentials in the secure **Settings** screen inside the application.
+   - Alternatively, copy `.env.example` to `.env` and specify default keys.
+
+4. **Build and Run:**
+   - Open the project in Android Studio.
+   - Sync Gradle files.
+   - Run the `:app` module on a compatible Android device or emulator.
+
+## License
+
+This project is licensed under the Apache License 2.0. See the `LICENSE` file for details.

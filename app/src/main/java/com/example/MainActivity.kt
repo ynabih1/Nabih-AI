@@ -1,5 +1,24 @@
 package com.example
 
+import com.example.core.di.ViewModelFactory
+import com.example.core.model.AppLanguage
+import com.example.core.model.AppTheme
+import com.example.core.theme.NabihTheme
+import com.example.feature.auth.AccountScreen
+import com.example.feature.auth.AuthManager
+import com.example.feature.auth.LoginScreen
+import com.example.feature.chat.ChatViewModel
+import com.example.feature.chat.HomeViewModel
+import com.example.feature.chat.MainScreen
+import com.example.feature.chat.VoiceScreen
+import com.example.feature.settings.SettingsScreen
+import com.example.feature.settings.SettingsViewModel
+import com.example.feature.tools.AiToolsScreen
+import com.example.feature.tools.FilesScreen
+import com.example.feature.tools.HelpScreen
+import com.example.feature.tools.PrivacyScreen
+import com.example.feature.tools.SavedChatsScreen
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,10 +40,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.data.model.AppLanguage
-import com.example.ui.screen.*
-import com.example.ui.theme.NabihTheme
-import com.example.ui.viewmodel.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,7 +64,7 @@ class MainActivity : ComponentActivity() {
 
             // Dynamically provide Language Alignment (RTL / LTR) across all layouts
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                NabihTheme(darkTheme = settings.theme == com.example.data.model.AppTheme.DARK) {
+                NabihTheme(darkTheme = settings.theme == com.example.core.model.AppTheme.DARK) {
                     Surface(modifier = Modifier.fillMaxSize()) {
                         val navController = rememberNavController()
 
@@ -107,6 +122,7 @@ class MainActivity : ComponentActivity() {
                             composable("voice") {
                                 VoiceScreen(
                                     settingsViewModel = settingsViewModel,
+                                    chatViewModel = chatViewModel,
                                     onNavigateBack = {
                                         navController.popBackStack()
                                     }
@@ -128,19 +144,27 @@ class MainActivity : ComponentActivity() {
                                     onNavigateBack = { navController.popBackStack() },
                                     isArabic = settings.language == AppLanguage.ARABIC,
                                     onLogout = {
-                                        settingsViewModel.logout()
-                                        navController.navigate("login") {
-                                            popUpTo("home") { inclusive = true }
+                                        AuthManager.signOutGoogle(this@MainActivity) {
+                                            AuthManager.signOutMicrosoft {
+                                                settingsViewModel.logout()
+                                                navController.navigate("login") {
+                                                    popUpTo("home") { inclusive = true }
+                                                }
+                                            }
                                         }
                                     },
                                     onDeleteAccount = {
                                         settingsViewModel.viewModelScope.launch {
                                             appContainer.chatRepository.deleteAllConversations()
                                             appContainer.memoryRepository.deleteAllMemories()
-                                            settingsViewModel.logout()
-                                            settingsViewModel.saveApiKeys("", "", "")
-                                            navController.navigate("login") {
-                                                popUpTo("home") { inclusive = true }
+                                            AuthManager.signOutGoogle(this@MainActivity) {
+                                                AuthManager.signOutMicrosoft {
+                                                    settingsViewModel.logout()
+                                                    settingsViewModel.saveApiKeys("", "", "", "")
+                                                    navController.navigate("login") {
+                                                        popUpTo("home") { inclusive = true }
+                                                    }
+                                                }
                                             }
                                         }
                                     }

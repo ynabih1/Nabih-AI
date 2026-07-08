@@ -1,0 +1,14 @@
+{
+  "client_id" : "00000000-0000-0000-0000-000000000000",
+  "authorization_user_agent" : "DEFAULT",
+  "redirect_uri" : "msauth://com.aistudio.nabihai.xlyjpr/XNfSDvsfSBSOllF0OgztlughAGY%3D",
+  "authorities" : [
+    {
+      "type": "AAD",
+      "audience": {
+        "type": "AzureADandPersonalMicrosoftAccount"
+      },
+      "default": true
+    }
+  ]
+}
