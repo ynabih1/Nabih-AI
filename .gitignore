@@ -1,18 +1,39 @@
+# Built artifacts
+bin/
+gen/
+out/
+build/
+app/build/
+.gradle/
+.kotlin/
+kotlin-daemon-*.log
+
+# IDEs and Editors
+.idea/
 *.iml
-.gradle
-.kotlin
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+*.ipr
+*.iws
+.navigation/
+.cxx/
+.externalNativeBuild/
+captures/
+.metadata/
+
+# Keystores and private keys
+*.keystore
+*.jks
+debug.keystore
+debug.keystore.base64
 local.properties
 .env
-debug.keystore
+.env.*
+!*.example
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Logs and databases
+*.log
+*.sqlite
+*.db

@@ -151,12 +151,21 @@ fun ApiKeysSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic
 
             AnimatedVisibility(visible = showKeys) {
                 Column(modifier = Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = nabihKey,
+                        onValueChange = { nabihKey = it },
+                        label = { Text(if (isArabic) "Nabih Ultra" else "Nabih Ultra") },
+                        placeholder = { Text(if (isArabic) "الوضع المحلي (تلقائي)" else "Local Mode (Automatic)") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     OutlinedTextField(value = googleKey, onValueChange = { googleKey = it }, label = { Text("Google Gemini Key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(value = openaiKey, onValueChange = { openaiKey = it }, label = { Text("OpenAI Key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(value = anthropicKey, onValueChange = { anthropicKey = it }, label = { Text("Anthropic Claude Key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                     
                     if (validationMessage.isNotEmpty()) {
-                        Text(text = validationMessage, style = MaterialTheme.typography.bodySmall, color = if (validationMessage.contains("Error") || validationMessage.contains("خطأ")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                        Text(text = validationMessage, style = MaterialTheme.typography.bodySmall, color = if (validationMessage.contains("Error") || validationMessage.contains("خطأ") || validationMessage.contains("غير صالح") || validationMessage.contains("Invalid")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                     }
 
                     Row(
@@ -166,15 +175,16 @@ fun ApiKeysSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic
                         Button(
                             onClick = {
                                 isValidating = true
-                                validationMessage = if (isArabic) "جاري الحفظ..." else "Saving keys..."
+                                validationMessage = if (isArabic) "جاري التحقق من المفاتيح..." else "Validating API keys..."
                                 coroutineScope.launch {
-                                    kotlinx.coroutines.delay(500)
-                                    viewModel.saveApiKeys(nabihKey, googleKey, openaiKey, anthropicKey)
+                                    val result = viewModel.validateAndSaveApiKeys(nabihKey, googleKey, openaiKey, anthropicKey, isArabic)
                                     isValidating = false
-                                    validationMessage = if (isArabic) "تم الحفظ بنجاح!" else "Keys saved successfully!"
-                                    kotlinx.coroutines.delay(2000)
-                                    validationMessage = ""
-                                    showKeys = false
+                                    validationMessage = result.second
+                                    if (result.first) {
+                                        kotlinx.coroutines.delay(2000)
+                                        validationMessage = ""
+                                        showKeys = false
+                                    }
                                 }
                             },
                             enabled = !isValidating,

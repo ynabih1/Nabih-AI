@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 class SettingsRepository(context: Context) {
     private val prefs = context.getSharedPreferences("nabih_ai_settings", Context.MODE_PRIVATE)
+    private val secureStorage = com.example.core.utils.SecureStorage(context)
 
     private val _settings = MutableStateFlow(loadSettings())
     val settings: StateFlow<AppSettings> = _settings
@@ -47,10 +48,10 @@ class SettingsRepository(context: Context) {
             defaultModel = AiModel.valueOf(modelStr),
             voiceEnabled = prefs.getBoolean("voice_enabled", true),
             hapticFeedback = prefs.getBoolean("haptic_feedback", true),
-            nabihApiKey = prefs.getString("key_nabih", "") ?: "",
-            googleApiKey = prefs.getString("key_google", "") ?: "",
-            openaiApiKey = prefs.getString("key_openai", "") ?: "",
-            anthropicApiKey = prefs.getString("key_anthropic", "") ?: "",
+            nabihApiKey = secureStorage.getKey("key_nabih"),
+            googleApiKey = secureStorage.getKey("key_google"),
+            openaiApiKey = secureStorage.getKey("key_openai"),
+            anthropicApiKey = secureStorage.getKey("key_anthropic"),
             isLoggedIn = prefs.getBoolean("is_logged_in", false),
             authType = prefs.getString("auth_type", "") ?: "",
             userEmail = userEmail,
@@ -206,12 +207,10 @@ class SettingsRepository(context: Context) {
         openai: String,
         anthropic: String
     ) {
-        prefs.edit()
-            .putString("key_nabih", nabih)
-            .putString("key_google", google)
-            .putString("key_openai", openai)
-            .putString("key_anthropic", anthropic)
-                        .apply()
+        secureStorage.saveKey("key_nabih", nabih)
+        secureStorage.saveKey("key_google", google)
+        secureStorage.saveKey("key_openai", openai)
+        secureStorage.saveKey("key_anthropic", anthropic)
         _settings.value = loadSettings()
     }
 }
