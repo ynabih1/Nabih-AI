@@ -38,10 +38,6 @@ class SettingsViewModel(
         settingsRepository.updateLoginState(isLoggedIn, authType, userEmail, userName)
     }
 
-    fun updateGoogleAccount(email: String, name: String) {
-        settingsRepository.updateGoogleAccount(email, name)
-    }
-
     fun updateMicrosoftAccount(email: String, name: String) {
         settingsRepository.updateMicrosoftAccount(email, name)
     }
@@ -94,8 +90,18 @@ class SettingsViewModel(
         settingsRepository.updateHapticFeedback(enabled)
     }
 
-    fun saveApiKeys(nabih: String, google: String, openai: String, anthropic: String) {
-        settingsRepository.updateApiKeys(nabih, google, openai, anthropic)
+    fun saveApiKeys(
+        nabih: String,
+        google: String,
+        openai: String,
+        anthropic: String
+    ) {
+        settingsRepository.updateApiKeys(
+            nabih.trim(),
+            google.trim(),
+            openai.trim(),
+            anthropic.trim()
+        )
     }
 
     suspend fun validateAndSaveApiKeys(
@@ -105,38 +111,43 @@ class SettingsViewModel(
         anthropic: String,
         isArabic: Boolean
     ): Pair<Boolean, String> {
-        if (google.isNotEmpty() && google != settings.value.googleApiKey) {
-            val valid = validateGeminiKey(google)
-            if (!valid) {
-                return Pair(false, if (isArabic) "مفتاح Google Gemini غير صالح! يرجى التحقق منه." else "Invalid Google Gemini Key! Please check it.")
-            }
+        val trimmedGoogle = google.trim()
+        val trimmedNabih = nabih.trim()
+        val trimmedOpenai = openai.trim()
+        val trimmedAnthropic = anthropic.trim()
+
+        if (trimmedGoogle.isNotEmpty() && trimmedGoogle != settings.value.googleApiKey) {
+            val (valid, errorMsg) = validateGeminiKey(trimmedGoogle, "Google Gemini", isArabic)
+            if (!valid) return Pair(false, errorMsg)
         }
         
-        if (nabih.isNotEmpty() && nabih != settings.value.nabihApiKey) {
-            val valid = validateGeminiKey(nabih)
-            if (!valid) {
-                return Pair(false, if (isArabic) "مفتاح Nabih Ultra غير صالح! يرجى التحقق منه." else "Invalid Nabih Ultra Key! Please check it.")
-            }
+        if (trimmedNabih.isNotEmpty() && trimmedNabih != settings.value.nabihApiKey) {
+            val (valid, errorMsg) = validateGeminiKey(trimmedNabih, "Nabih Ultra", isArabic)
+            if (!valid) return Pair(false, errorMsg)
         }
 
-        if (openai.isNotEmpty() && openai != settings.value.openaiApiKey) {
-            val valid = validateOpenAiKey(openai)
-            if (!valid) {
-                return Pair(false, if (isArabic) "مفتاح OpenAI غير صالح! يرجى التحقق منه." else "Invalid OpenAI Key! Please check it.")
-            }
+        if (trimmedOpenai.isNotEmpty() && trimmedOpenai != settings.value.openaiApiKey) {
+            val (valid, errorMsg) = validateOpenAiKey(trimmedOpenai, isArabic)
+            if (!valid) return Pair(false, errorMsg)
         }
 
-        if (anthropic.isNotEmpty() && anthropic != settings.value.anthropicApiKey) {
-            if (!anthropic.startsWith("sk-ant-") || anthropic.length < 20) {
-                return Pair(false, if (isArabic) "صيغة مفتاح Anthropic Claude غير صالحة!" else "Invalid Anthropic Claude Key format!")
-            }
+        if (trimmedAnthropic.isNotEmpty() && trimmedAnthropic != settings.value.anthropicApiKey) {
+            val (valid, errorMsg) = validateAnthropicKey(trimmedAnthropic, isArabic)
+            if (!valid) return Pair(false, errorMsg)
         }
 
-        settingsRepository.updateApiKeys(nabih, google, openai, anthropic)
-        return Pair(true, if (isArabic) "تم حفظ المفاتيح بنجاح!" else "Keys saved successfully!")
+        settingsRepository.updateApiKeys(
+            trimmedNabih,
+            trimmedGoogle,
+            trimmedOpenai,
+            trimmedAnthropic
+        )
+        return Pair(true, if (isArabic) "تم حفظ الإعدادات بنجاح!" else "Settings saved successfully!")
     }
 
-    private suspend fun validateGeminiKey(key: String): Boolean {
+    private suspend fun validateGeminiKey(key: String, providerName: String, isArabic: Boolean): Pair<Boolean, String> {
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        android.util.Log.d("ApiValidation", "Validating $providerName Key. Request URL: $url")
         return try {
             val response = com.example.core.network.NetworkClient.geminiService.generateContent(
                 model = "gemini-1.5-flash",
@@ -144,31 +155,125 @@ class SettingsViewModel(
                 request = com.example.core.network.GeminiRequest(
                     contents = listOf(
                         com.example.core.network.GeminiContent(
-                            parts = listOf(com.example.core.network.GeminiPart(text = "Hello"))
+                            parts = listOf(com.example.core.network.GeminiPart(text = "Ping"))
                         )
                     ),
                     generationConfig = com.example.core.network.GeminiGenerationConfig(maxOutputTokens = 1)
                 )
             )
-            response.candidates != null
+            val successMsg = if (response.candidates != null) "Success" else "No Candidates"
+            android.util.Log.d("ApiValidation", "$providerName Key Validation. Response status code: 200, Status: $successMsg")
+            Pair(true, "")
+        } catch (e: retrofit2.HttpException) {
+            val code = e.code()
+            val errorBody = e.response()?.errorBody()?.string() ?: ""
+            android.util.Log.e("ApiValidation", "$providerName Key Validation failed. URL: $url. Status: $code. Error: $errorBody")
+            val errorDetail = parseJsonError(errorBody) ?: errorBody
+            val errorMsg = if (isArabic) {
+                "فشل التحقق من مفتاح $providerName (HTTP $code): $errorDetail"
+            } else {
+                "$providerName Key validation failed (HTTP $code): $errorDetail"
+            }
+            Pair(false, errorMsg)
         } catch (e: Exception) {
-            false
+            android.util.Log.e("ApiValidation", "$providerName Key Validation failed with exception", e)
+            val errorMsg = if (isArabic) {
+                "فشل الاتصال بـ $providerName: ${e.localizedMessage}"
+            } else {
+                "Connection to $providerName failed: ${e.localizedMessage}"
+            }
+            Pair(false, errorMsg)
         }
     }
 
-    private suspend fun validateOpenAiKey(key: String): Boolean {
+    private suspend fun validateOpenAiKey(key: String, isArabic: Boolean): Pair<Boolean, String> {
+        val url = "https://api.openai.com/v1/chat/completions"
+        android.util.Log.d("ApiValidation", "Validating OpenAI Key. Request URL: $url")
         return try {
             val response = com.example.core.network.NetworkClient.openAiService.generateCompletion(
                 authorization = "Bearer $key",
                 request = com.example.core.network.OpenAiRequest(
-                    model = "gpt-3.5-turbo",
-                    messages = listOf(com.example.core.network.OpenAiMessage("user", "Hello")),
+                    model = "gpt-4o-mini",
+                    messages = listOf(com.example.core.network.OpenAiMessage("user", "Ping")),
                     temperature = 0.7f
                 )
             )
-            response.choices != null
+            android.util.Log.d("ApiValidation", "OpenAI Key Validation success. Response status code: 200")
+            Pair(true, "")
+        } catch (e: retrofit2.HttpException) {
+            val code = e.code()
+            val errorBody = e.response()?.errorBody()?.string() ?: ""
+            android.util.Log.e("ApiValidation", "OpenAI Key Validation failed. URL: $url. Status: $code. Error: $errorBody")
+            val errorDetail = parseJsonError(errorBody) ?: errorBody
+            val errorMsg = if (isArabic) {
+                "فشل التحقق من مفتاح OpenAI (HTTP $code): $errorDetail"
+            } else {
+                "OpenAI Key validation failed (HTTP $code): $errorDetail"
+            }
+            Pair(false, errorMsg)
         } catch (e: Exception) {
-            false
+            android.util.Log.e("ApiValidation", "OpenAI Key Validation failed with exception", e)
+            val errorMsg = if (isArabic) {
+                "فشل الاتصال بـ OpenAI: ${e.localizedMessage}"
+            } else {
+                "Connection to OpenAI failed: ${e.localizedMessage}"
+            }
+            Pair(false, errorMsg)
+        }
+    }
+
+    private suspend fun validateAnthropicKey(key: String, isArabic: Boolean): Pair<Boolean, String> {
+        val url = "https://api.anthropic.com/v1/messages"
+        android.util.Log.d("ApiValidation", "Validating Anthropic Key. Request URL: $url")
+        return try {
+            val response = com.example.core.network.NetworkClient.claudeService.generateMessage(
+                apiKey = key,
+                request = com.example.core.network.ClaudeRequest(
+                    model = "claude-3-haiku-20240307",
+                    messages = listOf(com.example.core.network.ClaudeMessage("user", "Ping")),
+                    max_tokens = 1
+                )
+            )
+            android.util.Log.d("ApiValidation", "Anthropic Key Validation success. Response status code: 200")
+            Pair(true, "")
+        } catch (e: retrofit2.HttpException) {
+            val code = e.code()
+            val errorBody = e.response()?.errorBody()?.string() ?: ""
+            android.util.Log.e("ApiValidation", "Anthropic Key Validation failed. URL: $url. Status: $code. Error: $errorBody")
+            val errorDetail = parseJsonError(errorBody) ?: errorBody
+            val errorMsg = if (isArabic) {
+                "فشل التحقق من مفتاح Anthropic (HTTP $code): $errorDetail"
+            } else {
+                "Anthropic Key validation failed (HTTP $code): $errorDetail"
+            }
+            Pair(false, errorMsg)
+        } catch (e: Exception) {
+            android.util.Log.e("ApiValidation", "Anthropic Key Validation failed with exception", e)
+            val errorMsg = if (isArabic) {
+                "فشل الاتصال بـ Anthropic: ${e.localizedMessage}"
+            } else {
+                "Connection to Anthropic failed: ${e.localizedMessage}"
+            }
+            Pair(false, errorMsg)
+        }
+    }
+
+    private fun parseJsonError(json: String): String? {
+        return try {
+            val jsonObject = org.json.JSONObject(json)
+            if (jsonObject.has("error")) {
+                val errorObj = jsonObject.get("error")
+                if (errorObj is org.json.JSONObject) {
+                    if (errorObj.has("message")) {
+                        return errorObj.getString("message")
+                    }
+                } else if (errorObj is String) {
+                    return errorObj
+                }
+            }
+            null
+        } catch (e: Exception) {
+            null
         }
     }
 

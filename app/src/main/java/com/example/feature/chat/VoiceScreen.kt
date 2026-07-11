@@ -4,21 +4,27 @@ import com.example.core.model.AppLanguage
 import com.example.feature.settings.SettingsViewModel
 
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.scale
@@ -41,12 +47,20 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 
+private fun isTextArabic(text: String): Boolean {
+    for (char in text) {
+        if (Character.UnicodeBlock.of(char) == Character.UnicodeBlock.ARABIC) {
+            return true
+        }
+    }
+    return false
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VoiceScreen(
     settingsViewModel: SettingsViewModel,
-    chatViewModel: com.example.feature.chat.ChatViewModel,
+    chatViewModel: ChatViewModel,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -56,6 +70,15 @@ fun VoiceScreen(
 
     var isListening by remember { mutableStateOf(true) }
     var voiceStateText by remember { mutableStateOf("") }
+    
+    // Real-time Waveform Amplitudes
+    val waveformAmplitudes = remember { mutableStateListOf<Float>() }
+    // Initialize with quiet state
+    LaunchedEffect(Unit) {
+        for (i in 0..24) {
+            waveformAmplitudes.add(0.05f)
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) {
@@ -70,120 +93,182 @@ fun VoiceScreen(
         }
     }
 
-    // TTS engine
+    // TTS engine state
     var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
+    var isAiSpeaking by remember { mutableStateOf(false) }
+
+    val speechRecognizer by remember { mutableStateOf<SpeechRecognizer?>(if (SpeechRecognizer.isRecognitionAvailable(context)) SpeechRecognizer.createSpeechRecognizer(context) else null) }
+    val chatState by chatViewModel.uiState.collectAsStateWithLifecycle()
+    val isGenerating by chatViewModel.isGenerating.collectAsStateWithLifecycle()
+    val streamingResponse by chatViewModel.currentStreamingResponse.collectAsStateWithLifecycle()
+
+    // Setup TextToSpeech
     LaunchedEffect(Unit) {
         ttsEngine = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 ttsEngine?.language = if (isArabic) Locale("ar") else Locale.US
+
+                // Native event listeners to maintain conversational turns
+                ttsEngine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        isAiSpeaking = true
+                        voiceStateText = if (isArabic) "يتحدث نبيه الآن..." else "Nabih is speaking..."
+                    }
+
+                    override fun onDone(utteranceId: String?) {
+                        isAiSpeaking = false
+                        // Once finished speaking, instantly open the mic for continuous conversation!
+                        if (isListening) {
+                            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                val primaryLang = if (isArabic) "ar-SA" else "en-US"
+                                val secondaryLang = if (isArabic) "en-US" else "ar-SA"
+                                putExtra(RecognizerIntent.EXTRA_LANGUAGE, primaryLang)
+                                putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf(secondaryLang))
+                                putExtra("android.speech.extra.ENABLE_LANGUAGE_DETECTION", true)
+                                putExtra("android.speech.extra.LANGUAGE_SWITCH_ENABLED", true)
+                                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                            }
+                            // Run on main thread safely
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                speechRecognizer?.startListening(intent)
+                                voiceStateText = if (isArabic) "جاري الاستماع إليك..." else "Listening to you..."
+                            }
+                        } else {
+                            voiceStateText = if (isArabic) "جاهز للرد" else "Ready"
+                        }
+                    }
+
+                    override fun onError(utteranceId: String?) {
+                        isAiSpeaking = false
+                    }
+                })
             }
         }
     }
+
     DisposableEffect(Unit) {
         onDispose {
             ttsEngine?.stop()
             ttsEngine?.shutdown()
-        }
-    }
-
-    var speechRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
-    val chatState by chatViewModel.uiState.collectAsStateWithLifecycle()
-    val isGenerating by chatViewModel.isGenerating.collectAsStateWithLifecycle()
-    val streamingResponse by chatViewModel.currentStreamingResponse.collectAsStateWithLifecycle()
-    
-    // Setup Speech Recognizer
-    LaunchedEffect(Unit) {
-        if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
-            recognizer.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    voiceStateText = if (isArabic) "تحدث الآن..." else "Speak now..."
-                }
-                override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {
-                    voiceStateText = if (isArabic) "جاري المعالجة..." else "Processing..."
-                }
-                override fun onError(error: Int) {
-                    voiceStateText = if (isArabic) "خطأ في التعرف. انقر للمحاولة مرة أخرى." else "Recognition error. Tap mic to retry."
-                    isListening = false
-                }
-                override fun onResults(results: Bundle?) {
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val recognizedText = matches?.firstOrNull()
-                    if (!recognizedText.isNullOrBlank()) {
-                        voiceStateText = if (isArabic) "جاري التفكير..." else "Thinking..."
-                        chatViewModel.sendMessage(recognizedText)
-                    } else {
-                        isListening = false
-                    }
-                }
-                override fun onPartialResults(partialResults: Bundle?) {}
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
-            speechRecognizer = recognizer
-        } else {
-            voiceStateText = if (isArabic) "التعرف على الصوت غير متاح" else "Speech recognition not available"
-            isListening = false
-        }
-    }
-    
-    DisposableEffect(Unit) {
-        onDispose {
             speechRecognizer?.destroy()
         }
     }
 
-    // Handle Mic toggle
-    LaunchedEffect(isListening) {
-        if (isListening && speechRecognizer != null && !isGenerating) {
+    // Configure Speech Recognition listeners
+    LaunchedEffect(speechRecognizer, isArabic) {
+        speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {
+                voiceStateText = if (isArabic) "تحدث الآن..." else "Speak now..."
+            }
+
+            override fun onBeginningOfSpeech() {
+                // Clear waveform
+                waveformAmplitudes.clear()
+                for (i in 0..24) {
+                    waveformAmplitudes.add(0.05f)
+                }
+            }
+
+            override fun onRmsChanged(rmsdB: Float) {
+                // Map dB audio level to normalized height
+                val norm = ((rmsdB + 2f) / 14f).coerceIn(0.05f, 1.0f)
+                if (waveformAmplitudes.size >= 25) {
+                    waveformAmplitudes.removeAt(0)
+                }
+                waveformAmplitudes.add(norm)
+            }
+
+            override fun onBufferReceived(buffer: ByteArray?) {}
+
+            override fun onEndOfSpeech() {
+                voiceStateText = if (isArabic) "جاري التفكير..." else "Analyzing speech..."
+            }
+
+            override fun onError(error: Int) {
+                // Handle different error states gracefully
+                voiceStateText = when (error) {
+                    SpeechRecognizer.ERROR_NO_MATCH -> if (isArabic) "لم اسمعك بوضوح. انقر للتحدث" else "Didn't catch that. Tap to talk."
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> if (isArabic) "انتهى وقت التحدث. انقر للتحدث" else "Speech timeout. Tap to talk."
+                    else -> if (isArabic) "خطأ في الاتصال. انقر للبدء" else "Connection paused. Tap to restart."
+                }
+                isListening = false
+            }
+
+            override fun onResults(results: Bundle?) {
+                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val recognizedText = matches?.firstOrNull()
+                if (!recognizedText.isNullOrBlank()) {
+                    voiceStateText = if (isArabic) "جاري التفكير مع نبيه..." else "Nabih is thinking..."
+                    chatViewModel.sendMessage(recognizedText)
+                } else {
+                    isListening = false
+                }
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
+    }
+
+    // Process microphone active states
+    LaunchedEffect(isListening, speechRecognizer, isArabic) {
+        if (isListening && speechRecognizer != null && !isGenerating && !isAiSpeaking) {
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (isArabic) "ar" else "en-US")
+                val primaryLang = if (isArabic) "ar-SA" else "en-US"
+                val secondaryLang = if (isArabic) "en-US" else "ar-SA"
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, primaryLang)
+                putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf(secondaryLang))
+                putExtra("android.speech.extra.ENABLE_LANGUAGE_DETECTION", true)
+                putExtra("android.speech.extra.LANGUAGE_SWITCH_ENABLED", true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             }
             ttsEngine?.stop()
             speechRecognizer?.startListening(intent)
             voiceStateText = if (isArabic) "جاري الاستماع إليك..." else "Listening to you..."
         } else if (!isListening) {
             speechRecognizer?.stopListening()
-            if (!isGenerating) {
-                voiceStateText = if (isArabic) "تم كتم الميكروفون" else "Microphone muted"
+            if (!isGenerating && !isAiSpeaking) {
+                voiceStateText = if (isArabic) "الميكروفون صامت حالياً" else "Microphone is muted"
             }
         }
     }
 
-    // Handle Generation and TTS
+    // Trigger Speech output once response is loaded
     LaunchedEffect(isGenerating) {
         if (!isGenerating && streamingResponse.isBlank()) {
-            // When generation finishes, TTS should speak the latest model message
             val lastMsg = (chatState as? ChatUiState.Success)?.messages?.lastOrNull { it.role == "model" }
             if (lastMsg != null) {
-                voiceStateText = if (isArabic) "يتحدث الآن..." else "Speaking..."
-                ttsEngine?.speak(lastMsg.content, TextToSpeech.QUEUE_FLUSH, null, null)
-                // Resume listening after a delay
-                delay((lastMsg.content.length * 50).toLong() + 2000)
-                if (isListening) {
-                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (isArabic) "ar" else "en-US")
+                val textToSpeak = lastMsg.content
+                if (textToSpeak.isNotBlank()) {
+                    // Dynamically set language of Text-To-Speech engine based on actual text
+                    if (isTextArabic(textToSpeak)) {
+                        ttsEngine?.language = Locale("ar")
+                    } else {
+                        ttsEngine?.language = Locale.US
                     }
-                    speechRecognizer?.startListening(intent)
+                    // Speak response with clean progress tracker id
+                    val params = Bundle().apply {
+                        putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "NABIH_VOICE_UTTERANCE")
+                    }
+                    ttsEngine?.speak(textToSpeak, TextToSpeech.QUEUE_FLUSH, params, "NABIH_VOICE_UTTERANCE")
                 }
             }
         } else if (isGenerating) {
-            voiceStateText = if (isArabic) "جاري التفكير..." else "Thinking..."
+            ttsEngine?.stop()
+            isAiSpeaking = false
+            voiceStateText = if (isArabic) "جاري صياغة الرد..." else "Formulating response..."
         }
     }
 
-
-    // Wave animation scaling transition
+    // Pulse Wave animations
     val infiniteTransition = rememberInfiniteTransition()
     val waveScale1 by infiniteTransition.animateFloat(
         initialValue = 0.8f,
-        targetValue = 1.5f,
+        targetValue = 1.6f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearOutSlowInEasing),
+            animation = tween(1500, easing = LinearOutSlowInEasing),
             repeatMode = RepeatMode.Restart
         )
     )
@@ -191,7 +276,7 @@ fun VoiceScreen(
         initialValue = 0.8f,
         targetValue = 1.3f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1600, easing = LinearOutSlowInEasing),
+            animation = tween(2000, easing = LinearOutSlowInEasing),
             repeatMode = RepeatMode.Restart
         )
     )
@@ -199,7 +284,7 @@ fun VoiceScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isArabic) "المحادثة الصوتية الفورية" else "Advanced Voice Mode", fontWeight = FontWeight.Bold) },
+                title = { Text(if (isArabic) "المحادثة الصوتية الذكية" else "Advanced AI Voice Mode", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, "Back")
@@ -218,41 +303,46 @@ fun VoiceScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header Title description
+            // Header
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = if (isArabic) "نبيه المساعد الصوتي" else "Nabih Voice Agent",
+                    text = if (isArabic) "نبيه الصوتي الذكي" else "Nabih Voice Intelligence",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = if (isArabic) "تواصل بشكل طبيعي وكامل دون الحاجة للكتابة" else "Engage in effortless spoken chat in real time",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center
                 )
             }
 
-            // Glowing Waves visual canvas center
+            // Central Pulsing Orb or Interruption Overlay
             Box(
                 modifier = Modifier
                     .size(240.dp)
-                    .weight(1f),
+                    .weight(1f)
+                    .clickable {
+                        // Instant interruption action!
+                        if (isAiSpeaking) {
+                            ttsEngine?.stop()
+                            isAiSpeaking = false
+                            isListening = true
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
-                if (isListening) {
-                    // Pulsing Wave Ring 1
+                if (isListening || isAiSpeaking) {
                     val primaryColor = MaterialTheme.colorScheme.primary
+                    val secondaryColor = MaterialTheme.colorScheme.secondary
+                    
+                    // Ripple 1
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         scale(waveScale1) {
                             drawCircle(
                                 brush = Brush.radialGradient(
                                     colors = listOf(
-                                        primaryColor.copy(alpha = 0.2f),
+                                        primaryColor.copy(alpha = 0.25f),
                                         primaryColor.copy(alpha = 0.0f)
                                     )
                                 ),
@@ -261,14 +351,14 @@ fun VoiceScreen(
                         }
                     }
 
-                    // Pulsing Wave Ring 2
+                    // Ripple 2
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         scale(waveScale2) {
                             drawCircle(
                                 brush = Brush.radialGradient(
                                     colors = listOf(
-                                        primaryColor.copy(alpha = 0.1f),
-                                        primaryColor.copy(alpha = 0.0f)
+                                        secondaryColor.copy(alpha = 0.15f),
+                                        secondaryColor.copy(alpha = 0.0f)
                                     )
                                 ),
                                 radius = size.minDimension / 4
@@ -277,43 +367,95 @@ fun VoiceScreen(
                     }
                 }
 
-                // Central Mic / Volume Icon core
+                // Core Button/Avatar
                 Box(
                     modifier = Modifier
-                        .size(100.dp)
+                        .size(110.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                                )
+                                colors = if (isAiSpeaking) {
+                                    listOf(MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f))
+                                } else {
+                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                                }
                             )
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = if (voiceStateText.contains("Speak") || voiceStateText.contains("يتحدث")) Icons.Default.VolumeUp else Icons.Default.Mic,
-                        contentDescription = "Microphone State",
-                        tint = Color.White,
-                        modifier = Modifier.size(40.dp)
-                    )
+                    if (isAiSpeaking) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.VolumeUp, null, tint = Color.White, modifier = Modifier.size(36.dp))
+                            Text(
+                                if (isArabic) "انقر للمقاطعة" else "Tap to Stop",
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    } else {
+                        Icon(
+                            imageVector = if (isListening) Icons.Default.Mic else Icons.Default.MicOff,
+                            contentDescription = "Session state",
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
                 }
             }
 
-            // Real-time voice state label
+            // Real-time scrolling spectrum spectrometer waveform!
+            AnimatedVisibility(
+                visible = isListening && waveformAmplitudes.isNotEmpty() && !isAiSpeaking,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                ) {
+                    val primaryColor = MaterialTheme.colorScheme.primary
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                    ) {
+                        val barWidth = 4.dp.toPx()
+                        val gap = 3.dp.toPx()
+                        val totalWidth = (barWidth + gap) * waveformAmplitudes.size - gap
+                        val startX = (size.width - totalWidth) / 2
+                        
+                        waveformAmplitudes.forEachIndexed { index, amp ->
+                            val x = startX + index * (barWidth + gap)
+                            val barHeight = (size.height * amp).coerceAtLeast(4.dp.toPx())
+                            val y = (size.height - barHeight) / 2
+                            
+                            drawRoundRect(
+                                color = primaryColor,
+                                topLeft = Offset(x, y),
+                                size = Size(barWidth, barHeight),
+                                cornerRadius = CornerRadius(barWidth / 2, barWidth / 2)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Status Text
             Text(
                 text = voiceStateText,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
 
-            // Mic Toggle control footer
+            // Mic Toggle Core Controller
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 IconButton(
@@ -335,9 +477,9 @@ fun VoiceScreen(
 
                 Text(
                     text = if (isListening) {
-                        if (isArabic) "اضغط للبدء في كتم الصوت" else "Tap to pause voice session"
+                        if (isArabic) "نبيه يستمع الآن... انقر للتبديل" else "Nabih is listening... Tap to pause"
                     } else {
-                        if (isArabic) "اضغط لإلغاء كتم الصوت" else "Tap to resume voice session"
+                        if (isArabic) "الميكروفون مغلق... انقر للتنشيط" else "Mic is off... Tap to activate"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)

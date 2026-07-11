@@ -2,9 +2,9 @@ package com.example.core.model
 
 enum class ApiProvider(val displayName: String) {
     NABIH("Nabih AI"),
-    GOOGLE("Google"),
-    OPENAI("OpenAI"),
-    ANTHROPIC("Anthropic")
+    GOOGLE("Google Gemini"),
+    OPENAI("OpenAI ChatGPT"),
+    ANTHROPIC("Anthropic Claude")
 }
 
 enum class AiModel(
@@ -23,43 +23,27 @@ enum class AiModel(
         supportsImages = true,
         supportsDocuments = true
     ),
-    GEMINI_FLASH(
-        id = "gemini-flash-latest",
-        displayName = "Gemini Flash",
-        provider = ApiProvider.GOOGLE,
-        description = "Google's fast, multimodal model optimized for speed and general tasks.",
-        supportsImages = true,
-        supportsDocuments = true
-    ),
-    GEMINI_PRO(
-        id = "gemini-flash-latest",
-        displayName = "Gemini Pro",
+    GEMINI(
+        id = "gemini-2.5-pro",
+        displayName = "Gemini",
         provider = ApiProvider.GOOGLE,
         description = "Google's flagship model for advanced reasoning, coding, and complex tasks.",
         supportsImages = true,
         supportsDocuments = true
     ),
-    GPT_4O(
-        id = "gpt-4o",
-        displayName = "GPT-4o",
+    CHATGPT(
+        id = "gpt-5",
+        displayName = "ChatGPT",
         provider = ApiProvider.OPENAI,
-        description = "OpenAI's versatile high-intelligence multimodal model.",
+        description = "OpenAI's latest next-generation frontier intelligence model.",
         supportsImages = true,
         supportsDocuments = true
     ),
-    GPT_4O_MINI(
-        id = "gpt-4o-mini",
-        displayName = "GPT-4o Mini",
-        provider = ApiProvider.OPENAI,
-        description = "OpenAI's fast, lightweight intelligence model.",
-        supportsImages = true,
-        supportsDocuments = true
-    ),
-    CLAUDE_SONNET(
-        id = "claude-3-5-sonnet",
-        displayName = "Claude 3.5 Sonnet",
+    CLAUDE(
+        id = "claude-3-7-sonnet",
+        displayName = "Claude",
         provider = ApiProvider.ANTHROPIC,
-        description = "Anthropic's state-of-the-art model for coding, analysis, and deep reasoning.",
+        description = "Anthropic's flagship state-of-the-art model with hybrid thinking.",
         supportsImages = true,
         supportsDocuments = true
     );
@@ -107,8 +91,6 @@ data class AppSettings(
     val authType: String = "", // "GUEST", "GOOGLE", "MICROSOFT", "EMAIL", "PASSKEY"
     val userEmail: String = "",
     val userName: String = "",
-    val googleEmail: String = "",
-    val googleName: String = "",
     val microsoftEmail: String = "",
     val microsoftName: String = "",
     val biometricsEnabled: Boolean = false,

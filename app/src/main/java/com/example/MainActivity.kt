@@ -13,7 +13,6 @@ import com.example.feature.chat.MainScreen
 import com.example.feature.chat.VoiceScreen
 import com.example.feature.settings.SettingsScreen
 import com.example.feature.settings.SettingsViewModel
-import com.example.feature.tools.AiToolsScreen
 import com.example.feature.tools.FilesScreen
 import com.example.feature.tools.HelpScreen
 import com.example.feature.tools.PrivacyScreen
@@ -135,21 +134,16 @@ class MainActivity : ComponentActivity() {
                             composable("files") {
                                 FilesScreen(onNavigateBack = { navController.popBackStack() }, isArabic = settings.language == AppLanguage.ARABIC)
                             }
-                            composable("tools") {
-                                AiToolsScreen(onNavigateBack = { navController.popBackStack() }, isArabic = settings.language == AppLanguage.ARABIC)
-                            }
                             composable("account") {
                                 AccountScreen(
                                     settingsViewModel = settingsViewModel,
                                     onNavigateBack = { navController.popBackStack() },
                                     isArabic = settings.language == AppLanguage.ARABIC,
                                     onLogout = {
-                                        AuthManager.signOutGoogle(this@MainActivity) {
-                                            AuthManager.signOutMicrosoft {
-                                                settingsViewModel.logout()
-                                                navController.navigate("login") {
-                                                    popUpTo("home") { inclusive = true }
-                                                }
+                                        AuthManager.signOutMicrosoft {
+                                            settingsViewModel.logout()
+                                            navController.navigate("login") {
+                                                popUpTo("home") { inclusive = true }
                                             }
                                         }
                                     },
@@ -157,13 +151,11 @@ class MainActivity : ComponentActivity() {
                                         settingsViewModel.viewModelScope.launch {
                                             appContainer.chatRepository.deleteAllConversations()
                                             appContainer.memoryRepository.deleteAllMemories()
-                                            AuthManager.signOutGoogle(this@MainActivity) {
-                                                AuthManager.signOutMicrosoft {
-                                                    settingsViewModel.logout()
-                                                    settingsViewModel.saveApiKeys("", "", "", "")
-                                                    navController.navigate("login") {
-                                                        popUpTo("home") { inclusive = true }
-                                                    }
+                                            AuthManager.signOutMicrosoft {
+                                                settingsViewModel.logout()
+                                                settingsViewModel.saveApiKeys("", "", "", "")
+                                                navController.navigate("login") {
+                                                    popUpTo("home") { inclusive = true }
                                                 }
                                             }
                                         }

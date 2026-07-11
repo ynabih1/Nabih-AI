@@ -45,6 +45,8 @@ class ChatRepository(
     private val memoryDao: MemoryDao,
     private val settingsRepository: SettingsRepository
 ) {
+    private val responseCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
     // --- Room Database Fetchers ---
 
     val folders: Flow<List<Folder>> = folderDao.getAllFolders()
@@ -105,6 +107,10 @@ class ChatRepository(
         if (conv != null) {
             conversationDao.updateConversation(conv.copy(updatedAt = System.currentTimeMillis()))
         }
+    }
+
+    suspend fun deleteMessageById(id: String) = withContext(Dispatchers.IO) {
+        messageDao.deleteMessageById(id)
     }
 
     suspend fun deleteConversationMessages(conversationId: String) = withContext(Dispatchers.IO) {
@@ -169,23 +175,7 @@ class ChatRepository(
 
     suspend fun parseAttachedDocument(uri: Uri): Pair<String, String> = withContext(Dispatchers.IO) {
         val fileName = getFileName(uri) ?: "Attached Document"
-        val extension = fileName.substringAfterLast('.', "").lowercase()
-        var textContent = ""
-
-        try {
-            val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
-            if (inputStream != null) {
-                if (extension == "txt" || extension == "csv" || extension == "json" || extension == "md") {
-                    textContent = inputStream.bufferedReader().use { it.readText() }
-                } else {
-                    val bytes = inputStream.readBytes()
-                    textContent = "[Binary Document Attached: ${extension.uppercase()}, size: ${bytes.size} bytes. The actual file data is provided natively to the model if supported.]"
-                }
-            }
-        } catch (e: Exception) {
-            textContent = "[Failed to parse document content: ${e.localizedMessage}]"
-        }
-
+        val textContent = com.example.core.utils.DocumentParser.parseUri(context, uri)
         Pair(fileName, textContent)
     }
 
@@ -281,15 +271,31 @@ class ChatRepository(
             conversationDao.updateConversation(conversation.copy(title = capitalizedTitle, updatedAt = System.currentTimeMillis()))
         }
 
+        // Check cache first
+        val cacheKey = "${model.id}_${searchEnabled}_${prompt}"
+        if (responseCache.containsKey(cacheKey)) {
+            val cachedText = responseCache[cacheKey]!!
+            var currentLength = 0
+            val chunkSize = 4
+            while (currentLength < cachedText.length) {
+                currentLength = (currentLength + chunkSize).coerceAtMost(cachedText.length)
+                emit(cachedText.substring(0, currentLength))
+                kotlinx.coroutines.delay(10)
+            }
+            return@flow
+        }
+
         // Load conversation history for context
         val history = messageDao.getMessagesForConversationSync(conversationId)
 
         // Compile memory system context to inject into system prompt
-        val list = memoryDao.getAllMemoryItems().first()
         var memoriesStr = ""
-        if (list.isNotEmpty()) {
-            memoriesStr = "Nabih remembered the following personal facts about the user:\n" +
-                    list.joinToString("\n") { "- ${it.content}" }
+        if (settings.memoryEnabled) {
+            val list = memoryDao.getAllMemoryItems().first()
+            if (list.isNotEmpty()) {
+                memoriesStr = "Nabih remembered the following personal facts about the user:\n" +
+                        list.joinToString("\n") { "- ${it.content}" }
+            }
         }
         var searchContext = ""
         if (searchEnabled) {
@@ -325,15 +331,18 @@ class ChatRepository(
             activePrompt += "\n[Document Attached: $docName. Use the contents for reasoning:\n$attachedDocText]"
         }
 
-        var actualModel = model
-        var actualModelId = actualModel.id
+        // Resolve model dynamically via ModelRegistry to automatically migrate deprecated models
+        val migratedModelId = com.example.core.model.ModelRegistry.checkAndMigrateDeprecated(context, model.id)
+        val registryModel = com.example.core.model.ModelRegistry.getModelById(context, migratedModelId)
+
+        var actualModelId = registryModel.id
         var finalApiKey = ""
 
-        when (actualModel.provider) {
+        when (registryModel.provider) {
             ApiProvider.NABIH -> {
-                finalApiKey = com.example.BuildConfig.GEMINI_API_KEY
-                // Removed API Key Required exception for Nabih to allow it to work locally/without API as requested.
-                actualModelId = "gemini-flash-latest" // use gemini under the hood
+                finalApiKey = settings.nabihApiKey.ifBlank { com.example.BuildConfig.GEMINI_API_KEY }
+                // Nabih Ultra maps to Gemini Pro under the hood as the local stable backup
+                actualModelId = "gemini-2.5-pro"
             }
             ApiProvider.GOOGLE -> {
                 finalApiKey = settings.googleApiKey
@@ -341,11 +350,11 @@ class ChatRepository(
             }
             ApiProvider.OPENAI -> {
                 finalApiKey = settings.openaiApiKey
-                if (finalApiKey.isEmpty()) throw Exception("API Key Required: OpenAI API Key is missing.")
+                if (finalApiKey.isEmpty()) throw Exception("API Key Required: OpenAI API Key is missing. Please add it in API Keys settings.")
             }
             ApiProvider.ANTHROPIC -> {
                 finalApiKey = settings.anthropicApiKey
-                if (finalApiKey.isEmpty()) throw Exception("API Key Required: Anthropic API Key is missing.")
+                if (finalApiKey.isEmpty()) throw Exception("API Key Required: Anthropic API Key is missing. Please add it in API Keys settings.")
             }
         }
 
@@ -358,7 +367,7 @@ class ChatRepository(
 
         while (currentTry < maxRetries && !success) {
             try {
-                when (actualModel.provider) {
+                when (registryModel.provider) {
                     ApiProvider.GOOGLE, ApiProvider.NABIH -> {
                         val geminiContents = mutableListOf<GeminiContent>()
                         history.forEach { msg ->
@@ -367,8 +376,9 @@ class ChatRepository(
                             geminiContents.add(GeminiContent(role = if (msg.role == "user") "user" else "model", parts = parts))
                         }
                         val activeParts = mutableListOf<GeminiPart>()
-                        if (attachedBase64Image != null) {
-                            activeParts.add(GeminiPart(inlineData = GeminiInlineData("image/jpeg", attachedBase64Image)))
+                        if (attachedBase64Image != null && attachedImageUri != null) {
+                            val mimeType = context.contentResolver.getType(attachedImageUri) ?: "image/jpeg"
+                            activeParts.add(GeminiPart(inlineData = GeminiInlineData(mimeType, attachedBase64Image)))
                         }
                         
                         // Check if we have an attached PDF to send to Gemini as inlineData
@@ -419,7 +429,7 @@ class ChatRepository(
                         }
                         messages.add(ClaudeMessage("user", activePrompt))
                         val req = ClaudeRequest(
-                            model = actualModel.id,
+                            model = actualModelId,
                             messages = messages,
                             system = systemPrompt,
                             temperature = 0.7f
@@ -432,7 +442,7 @@ class ChatRepository(
             } catch (e: Exception) {
                 lastException = e
 
-                android.util.Log.e("ChatRepository", "API Request failed on try $currentTry", e)
+                android.util.Log.e("ChatRepository", "API Request failed on try $currentTry for model $actualModelId", e)
                 currentTry++
                 if (currentTry < maxRetries) {
                     kotlinx.coroutines.delay(1000L * currentTry) // Exponential backoff
@@ -441,12 +451,46 @@ class ChatRepository(
         }
 
         if (!success) {
-            val errorMsg = lastException?.localizedMessage ?: "Failed to connect to AI provider after $maxRetries attempts."
-            val fullError = if (model.provider == ApiProvider.NABIH) "Nabih Ultra Service Error: $errorMsg" else errorMsg
-            throw Exception(fullError)
+            if (registryModel.id != "nabih-ultra") {
+                val fallbackModelId = registryModel.fallbackModelId
+                emit("[Model Fallback: Selected model is currently unavailable or returned an error. Switched to ${fallbackModelId} to maintain continuous conversation...]\n\n")
+                try {
+                    val fallbackModel = com.example.core.model.ModelRegistry.getModelById(context, fallbackModelId)
+                    val geminiContents = mutableListOf<GeminiContent>()
+                    history.forEach { msg ->
+                        geminiContents.add(GeminiContent(role = if (msg.role == "user") "user" else "model", parts = listOf(GeminiPart(text = msg.content))))
+                    }
+                    geminiContents.add(GeminiContent(role = "user", parts = listOf(GeminiPart(text = activePrompt))))
+                    val req = GeminiRequest(
+                        contents = geminiContents,
+                        systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = systemPrompt))),
+                        generationConfig = GeminiGenerationConfig(temperature = 0.7f)
+                    )
+                    val fallbackApiKey = settings.nabihApiKey.ifBlank { settings.googleApiKey.ifBlank { com.example.BuildConfig.GEMINI_API_KEY } }
+                    val response = NetworkClient.geminiService.generateContent("gemini-2.5-flash", fallbackApiKey, req)
+                    responseText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                        ?: "No text response generated by Google Gemini fallback."
+                } catch (fallbackEx: Exception) {
+                    throw Exception("Fallback to ${fallbackModelId} failed: ${fallbackEx.localizedMessage}")
+                }
+            } else {
+                val errorMsg = lastException?.localizedMessage ?: "Failed to connect to AI provider after $maxRetries attempts."
+                val fullError = if (model.provider == ApiProvider.NABIH) "Nabih Ultra Service Error: $errorMsg" else errorMsg
+                throw Exception(fullError)
+            }
         }
 
-        emit(responseText)
+        // Cache response
+        responseCache[cacheKey] = responseText
+
+        // Emit response smoothly chunk-by-chunk to emulate realistic fast stream
+        var currentLength = 0
+        val chunkSize = 4
+        while (currentLength < responseText.length) {
+            currentLength = (currentLength + chunkSize).coerceAtMost(responseText.length)
+            emit(responseText.substring(0, currentLength))
+            kotlinx.coroutines.delay(12)
+        }
 
     }.flowOn(Dispatchers.IO)
 
@@ -477,5 +521,26 @@ class ChatRepository(
     suspend fun renameConversation(conversationId: String, newTitle: String) = withContext(Dispatchers.IO) {
         val original = conversationDao.getConversationById(conversationId) ?: return@withContext
         conversationDao.updateConversation(original.copy(title = newTitle, updatedAt = System.currentTimeMillis()))
+    }
+
+    suspend fun generateImage(prompt: String, aspectRatio: String): String? = withContext(Dispatchers.IO) {
+        val settings = settingsRepository.settings.value
+        val finalApiKey = settings.googleApiKey.ifBlank { settings.nabihApiKey.ifBlank { com.example.BuildConfig.GEMINI_API_KEY } }
+        if (finalApiKey.isEmpty()) return@withContext null
+
+        val req = com.example.core.network.GeminiRequest(
+            contents = listOf(com.example.core.network.GeminiContent(parts = listOf(com.example.core.network.GeminiPart(text = prompt)))),
+            generationConfig = com.example.core.network.GeminiGenerationConfig(
+                responseModalities = listOf("TEXT", "IMAGE"),
+                imageConfig = com.example.core.network.GeminiImageConfig(aspectRatio = aspectRatio, imageSize = "1K")
+            )
+        )
+        try {
+            val response = com.example.core.network.NetworkClient.geminiService.generateContent("gemini-2.5-flash-image", finalApiKey, req)
+            response.candidates?.firstOrNull()?.content?.parts?.firstOrNull { it.inlineData != null }?.inlineData?.data
+        } catch (e: Exception) {
+            android.util.Log.e("ChatRepository", "Image Generation failed", e)
+            null
+        }
     }
 }

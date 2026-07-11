@@ -5,9 +5,6 @@ import com.example.R
 import android.app.Activity
 import android.content.Context
 import android.util.Log
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.microsoft.identity.client.AuthenticationCallback
 import com.microsoft.identity.client.IAuthenticationResult
 import com.microsoft.identity.client.IPublicClientApplication
@@ -19,24 +16,8 @@ import com.microsoft.identity.client.exception.MsalClientException
 object AuthManager {
     private const val TAG = "AuthManager"
     
-    private var googleSignInClient: GoogleSignInClient? = null
     private var msalSingleAccountApp: ISingleAccountPublicClientApplication? = null
     private var isMsalInitializing = false
-
-    /**
-     * Retrieves the configured Google Sign-In Client.
-     */
-    fun getGoogleSignInClient(context: Context): GoogleSignInClient {
-        if (googleSignInClient == null) {
-            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestEmail()
-                .requestProfile()
-                // requestIdToken is optional but recommended. If configured in the environment, we can pass it here.
-                .build()
-            googleSignInClient = GoogleSignIn.getClient(context.applicationContext, gso)
-        }
-        return googleSignInClient!!
-    }
 
     /**
      * Initializes the MSAL single account public client application.
@@ -94,16 +75,6 @@ object AuthManager {
             return
         }
         app.signIn(activity, null, arrayOf("user.read"), callback)
-    }
-
-    /**
-     * Signs out from Google Sign-In Client.
-     */
-    fun signOutGoogle(context: Context, onComplete: () -> Unit = {}) {
-        getGoogleSignInClient(context).signOut().addOnCompleteListener {
-            Log.i(TAG, "Google Sign-Out completed.")
-            onComplete()
-        }
     }
 
     /**

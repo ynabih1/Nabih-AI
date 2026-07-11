@@ -12,9 +12,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -43,8 +46,6 @@ import kotlinx.coroutines.launch
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.common.api.ApiException
 import com.microsoft.identity.client.AuthenticationCallback
 import com.microsoft.identity.client.IAuthenticationResult
 import com.microsoft.identity.client.AuthenticationResult
@@ -78,40 +79,7 @@ fun LoginScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
 
-    // Google Sign-In launcher with JWT structural validation
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        isLoading = false
-        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-        try {
-            val account = task.getResult(ApiException::class.java)
-            if (account != null) {
-                val email = account.email
-                val name = account.displayName ?: ""
-                val idToken = account.idToken
 
-                if (email != null) {
-                    if (idToken != null && AuthManager.isTokenStructurallyValid(idToken)) {
-                        settingsViewModel.updateLoginState(true, "GOOGLE", email, name)
-                        Toast.makeText(context, if (isArabic) "مرحباً بك $name" else "Welcome, $name!", Toast.LENGTH_SHORT).show()
-                        onLoginSuccess()
-                    } else {
-                        Toast.makeText(context, if (isArabic) "فشل التحقق من صحة رمز الهوية." else "Identity token validation failed.", Toast.LENGTH_LONG).show()
-                    }
-                } else {
-                    Toast.makeText(context, if (isArabic) "لم يتم العثور على بريد إلكتروني في حساب Google." else "No email address found in Google account.", Toast.LENGTH_LONG).show()
-                }
-            }
-        } catch (e: ApiException) {
-            val errCode = e.statusCode
-            if (errCode != 12501 && errCode != 12502) {
-                Toast.makeText(context, if (isArabic) "فشل تسجيل الدخول بـ Google: رمز $errCode" else "Google Sign-In failed: code $errCode", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, if (isArabic) "تم إلغاء تسجيل الدخول" else "Sign-In cancelled.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
 
     // Onboarding items
     val onboardingSlides = remember(isArabic) {
@@ -348,40 +316,7 @@ fun LoginScreen(
                                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                                 )
 
-                                // Custom Sign In Google (Original Minimalist Design)
-                                OutlinedButton(
-                                    onClick = {
-                                        isLoading = true
-                                        val signInIntent = AuthManager.getGoogleSignInClient(context).signInIntent
-                                        googleSignInLauncher.launch(signInIntent)
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(54.dp)
-                                        .testTag("google_login_button"),
-                                    shape = RoundedCornerShape(14.dp),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
-                                    colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.AlternateEmail,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = if (isArabic) "متابعة باستخدام حساب Google" else "Continue with Google Account",
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onBackground
-                                        )
-                                    }
-                                }
+
 
                                 // Custom Sign In Microsoft (Original Minimalist Design)
                                 OutlinedButton(
@@ -794,6 +729,8 @@ fun LoginScreen(
                 }
             }
         }
+
+
     }
 }
 

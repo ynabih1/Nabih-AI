@@ -36,9 +36,16 @@ data class GeminiRequest(
     val generationConfig: GeminiGenerationConfig? = null
 )
 
+data class GeminiImageConfig(
+    val aspectRatio: String? = null,
+    val imageSize: String? = null
+)
+
 data class GeminiGenerationConfig(
     val temperature: Float? = null,
-    val maxOutputTokens: Int? = null
+    val maxOutputTokens: Int? = null,
+    val responseModalities: List<String>? = null,
+    val imageConfig: GeminiImageConfig? = null
 )
 
 data class GeminiResponse(
@@ -220,15 +227,6 @@ object NetworkClient {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(ClaudeApiService::class.java)
-    }
-
-    val deepseekService: OpenAiApiService by lazy {
-        Retrofit.Builder()
-            .baseUrl("https://api.deepseek.com/")
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-            .create(OpenAiApiService::class.java)
     }
 
     val wikipediaService: WikipediaApiService by lazy {

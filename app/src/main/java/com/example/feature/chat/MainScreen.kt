@@ -25,9 +25,13 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,6 +52,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+
+fun generateAutoTitle(text: String): String {
+    val firstLine = text.lineSequence().firstOrNull()?.trim() ?: "New Chat"
+    val cleanText = firstLine.replace(Regex("\\[REASONING MODE:.*?\\]"), "").trim()
+    if (cleanText.isEmpty()) return "New Chat"
+    return if (cleanText.length > 25) {
+        val truncated = cleanText.take(25)
+        val lastSpace = truncated.lastIndexOf(' ')
+        if (lastSpace > 10) {
+            truncated.take(lastSpace) + "..."
+        } else {
+            truncated + "..."
+        }
+    } else {
+        cleanText
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,7 +120,11 @@ fun MainScreen(
                 },
                 onCloseDrawer = {
                     scope.launch { drawerState.close() }
-                }
+                },
+                onRenameConversation = { id, title -> homeViewModel.renameConversation(id, title) },
+                onDeleteConversation = { id -> homeViewModel.deleteConversation(id) },
+                onTogglePinConversation = { conv -> homeViewModel.togglePinConversation(conv) },
+                onToggleArchiveConversation = { conv -> homeViewModel.toggleArchiveConversation(conv) }
             )
         }
     ) {
@@ -142,38 +167,119 @@ fun MainScreen(
                             }
                             DropdownMenu(
                                 expanded = modelMenuExpanded,
-                                onDismissRequest = { modelMenuExpanded = false }
+                                onDismissRequest = { modelMenuExpanded = false },
+                                modifier = Modifier.width(320.dp).background(MaterialTheme.colorScheme.surface)
                             ) {
-                                val availableModels = listOf(
-                                    com.example.core.model.AiModel.NABIH_ULTRA,
-                                    com.example.core.model.AiModel.GPT_4O,
-                                    com.example.core.model.AiModel.GEMINI_PRO,
-                                    com.example.core.model.AiModel.CLAUDE_SONNET
-                                )
-                                availableModels.forEach { model ->
-                                    val isLocked = when (model) {
-                                        com.example.core.model.AiModel.NABIH_ULTRA -> false
-                                        com.example.core.model.AiModel.GPT_4O -> settings.openaiApiKey.isEmpty()
-                                        com.example.core.model.AiModel.GEMINI_PRO -> settings.googleApiKey.isEmpty()
-                                        com.example.core.model.AiModel.CLAUDE_SONNET -> settings.anthropicApiKey.isEmpty()
-                                        else -> false
+                                val registryModels = com.example.core.model.ModelRegistry.getModels(context).filter { model ->
+                                    when (model.provider) {
+                                        com.example.core.model.ApiProvider.NABIH -> true
+                                        com.example.core.model.ApiProvider.GOOGLE -> settings.googleApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.OPENAI -> settings.openaiApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.ANTHROPIC -> settings.anthropicApiKey.isNotEmpty()
                                     }
+                                }
+                                
+                                // Dynamic Sync Button
+                                var isRefreshing by remember { mutableStateOf(false) }
+                                val coroutineScope = rememberCoroutineScope()
+                                
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (isRefreshing) {
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            } else {
+                                                Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            }
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(if (isArabic) "تحديث النماذج تلقائياً" else "Sync Model Registry", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        }
+                                    },
+                                    onClick = {
+                                        if (!isRefreshing) {
+                                            isRefreshing = true
+                                            coroutineScope.launch {
+                                                com.example.core.model.ModelRegistry.syncAndRefresh(context,
+                                                    onSuccess = {
+                                                        isRefreshing = false
+                                                        android.widget.Toast.makeText(context, if (isArabic) "تم تحديث النماذج!" else "Model Registry synced!", android.widget.Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    onFailure = {
+                                                        isRefreshing = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                )
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                
+                                registryModels.forEach { modelMetadata ->
+                                    val modelEnum = com.example.core.model.AiModel.values().find { it.id == modelMetadata.id } ?: com.example.core.model.AiModel.NABIH_ULTRA
+                                    val isLocked = false
                                     DropdownMenuItem(
                                         text = { 
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                if (isLocked) {
-                                                    Icon(Icons.Outlined.Lock, contentDescription = "Locked", modifier = Modifier.size(16.dp).padding(end = 4.dp))
-                                                } else {
-                                                    Icon(Icons.Outlined.Check, contentDescription = "Ready", modifier = Modifier.size(16.dp).padding(end = 4.dp), tint = if (selectedModel == model) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent)
+                                            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    if (isLocked) {
+                                                        Icon(Icons.Outlined.Lock, contentDescription = "Locked", modifier = Modifier.size(16.dp).padding(end = 4.dp))
+                                                    } else {
+                                                        Icon(
+                                                            imageVector = if (modelMetadata.isDeprecated) Icons.Outlined.Warning else Icons.Outlined.Check,
+                                                            contentDescription = "Status",
+                                                            modifier = Modifier.size(16.dp).padding(end = 4.dp),
+                                                            tint = if (modelMetadata.isDeprecated) MaterialTheme.colorScheme.error 
+                                                                   else if (selectedModel.id == modelMetadata.id) MaterialTheme.colorScheme.primary 
+                                                                   else androidx.compose.ui.graphics.Color.Transparent
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = modelMetadata.displayName,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = if (isLocked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    
                                                 }
-                                                Text(model.displayName, color = if (isLocked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface) 
+                                                
+                                                if (modelMetadata.isDeprecated) {
+                                                    Text(
+                                                        text = if (isArabic) "سيتوقف قريباً! البديل: ${modelMetadata.fallbackModelId}" else "Deprecated! Migrates to: ${modelMetadata.fallbackModelId}",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.error,
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(start = 16.dp)
+                                                    )
+                                                } else if (modelMetadata.status == com.example.core.model.ModelStatus.MAINTENANCE) {
+                                                    Text(
+                                                        text = if (isArabic) "صيانة: غير متوفر مؤقتاً" else "Maintenance Mode",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = androidx.compose.ui.graphics.Color(0xFFE65100),
+                                                        fontSize = 10.sp,
+                                                        modifier = Modifier.padding(start = 16.dp)
+                                                    )
+                                                }
+                                                
+                                                Row(
+                                                    modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    val caps = modelMetadata.capabilities
+                                                    if (caps.text) Icon(Icons.Outlined.Notes, "Text", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                                                    if (caps.vision) Icon(Icons.Outlined.Visibility, "Vision", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                                                    if (caps.audio) Icon(Icons.Outlined.Mic, "Audio", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                                                    if (caps.reasoning) Icon(Icons.Outlined.Lightbulb, "Reasoning", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                                                    if (caps.imageGeneration) Icon(Icons.Outlined.Image, "Image Gen", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                                                    if (caps.fileAnalysis) Icon(Icons.Outlined.Description, "File Analysis", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                                                }
                                             }
                                         },
                                         onClick = {
                                             if (isLocked) {
-                                                android.widget.Toast.makeText(context, "API Key Required", android.widget.Toast.LENGTH_SHORT).show()
+                                                android.widget.Toast.makeText(context, if (isArabic) "مفتاح API مطلوب" else "API Key Required", android.widget.Toast.LENGTH_SHORT).show()
                                             } else {
-                                                chatViewModel.selectModel(model)
+                                                chatViewModel.selectModel(modelEnum)
                                                 modelMenuExpanded = false
                                             }
                                         }
@@ -237,7 +343,13 @@ fun MainScreen(
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 items(state.messages) { message ->
-                                    MessageItem(message = message, isArabic = isArabic, onRetry = { chatViewModel.retryLastResponse() })
+                                    MessageItem(
+                                        message = message,
+                                        isArabic = isArabic,
+                                        onRetry = { chatViewModel.retryLastResponse() },
+                                        onDelete = { chatViewModel.deleteMessage(message.id) },
+                                        onEdit = { newContent -> chatViewModel.editUserMessageAndRegenerate(message.id, newContent) }
+                                    )
                                 }
                                 if (isGenerating) {
                                     item {
@@ -278,8 +390,9 @@ fun MainScreen(
                     onSend = { text ->
                         val currentConvId = chatViewModel.activeConversationId.value
                         if (currentConvId == null) {
+                            val autoTitle = generateAutoTitle(text)
                             homeViewModel.createConversation(
-                                title = if (text.isNotBlank()) text.take(20) else "New Chat",
+                                title = autoTitle,
                                 modelId = selectedModel.id,
                                 isTemporary = false
                             ) { newId ->
@@ -358,10 +471,49 @@ contentDescription = null,
 }
 
 @Composable
-fun MessageItem(message: com.example.core.database.Message, isArabic: Boolean, isLoading: Boolean = false, onRetry: () -> Unit = {}) {
+fun MessageItem(
+    message: com.example.core.database.Message,
+    isArabic: Boolean,
+    isLoading: Boolean = false,
+    onRetry: () -> Unit = {},
+    onDelete: () -> Unit = {},
+    onEdit: (String) -> Unit = {}
+) {
     val isUser = message.role == "user"
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var editMessageText by remember { mutableStateOf(message.content) }
+
+    if (showEditDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text(if (isArabic) "تعديل الرسالة" else "Edit Message") },
+            text = {
+                OutlinedTextField(
+                    value = editMessageText,
+                    onValueChange = { editMessageText = it },
+                    label = { Text(if (isArabic) "الرسالة" else "Message") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onEdit(editMessageText)
+                        showEditDialog = false
+                    }
+                ) {
+                    Text(if (isArabic) "تحديث وإرسال" else "Update & Send")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text(if (isArabic) "إلغاء" else "Cancel")
+                }
+            }
+        )
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -473,6 +625,25 @@ fun MessageItem(message: com.example.core.database.Message, isArabic: Boolean, i
                             }
                             context.startActivity(android.content.Intent.createChooser(intent, null))
                             showMenu = false
+                        }
+                    )
+                    if (isUser) {
+                        DropdownMenuItem(
+                            text = { Text(if (isArabic) "تعديل" else "Edit") },
+                            leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                            onClick = {
+                                showMenu = false
+                                showEditDialog = true
+                            }
+                        )
+                    }
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text(if (isArabic) "حذف" else "Delete", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            showMenu = false
+                            onDelete()
                         }
                     )
                 }
@@ -845,6 +1016,189 @@ fun BottomInputArea(
 }
 
 @Composable
+fun SwipeableConversationItem(
+    conversation: Conversation,
+    isArabic: Boolean,
+    onSelectConversation: (String) -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+    onTogglePin: () -> Unit,
+    onToggleArchive: () -> Unit
+) {
+    var offsetX by remember { mutableStateOf(0f) }
+    val animatedOffset by animateFloatAsState(targetValue = offsetX, label = "swipeOffset")
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 2.dp)
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (offsetX < -80f) {
+                            offsetX = -120f
+                        } else if (offsetX > 80f) {
+                            offsetX = 120f
+                        } else {
+                            offsetX = 0f
+                        }
+                    },
+                    onDragCancel = {
+                        offsetX = 0f
+                    },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        offsetX = (offsetX + dragAmount).coerceIn(-140f, 140f)
+                    }
+                )
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .matchParentSize()
+                .background(MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp))
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = if (offsetX < 0) Arrangement.End else Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (offsetX < 0) {
+                IconButton(onClick = {
+                    offsetX = 0f
+                    onRename()
+                }) {
+                    Icon(Icons.Default.Edit, contentDescription = "Rename", tint = MaterialTheme.colorScheme.primary)
+                }
+                IconButton(onClick = {
+                    offsetX = 0f
+                    onDelete()
+                }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                }
+            } else {
+                IconButton(onClick = {
+                    offsetX = 0f
+                    onTogglePin()
+                }) {
+                    Icon(
+                        imageVector = if (conversation.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                        contentDescription = "Pin",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                IconButton(onClick = {
+                    offsetX = 0f
+                    onToggleArchive()
+                }) {
+                    Icon(
+                        imageVector = if (conversation.isArchived) Icons.Default.Unarchive else Icons.Default.Archive,
+                        contentDescription = "Archive",
+                        tint = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+        }
+
+        Surface(
+            modifier = Modifier
+                .offset(x = animatedOffset.dp)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp,
+            onClick = {
+                if (offsetX != 0f) {
+                    offsetX = 0f
+                } else {
+                    onSelectConversation(conversation.id)
+                }
+            }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = if (conversation.isPinned) Icons.Default.PushPin else Icons.Outlined.ChatBubbleOutline,
+                    contentDescription = null,
+                    tint = if (conversation.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = conversation.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (conversation.isPinned) FontWeight.Bold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = conversation.modelId.replace("gemini-2.5-", "").replace("gpt-5-", "").replace("-", " ").capitalize(Locale.ROOT),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+                
+                var showOptions by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(
+                        onClick = { showOptions = true },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = "Options",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showOptions,
+                        onDismissRequest = { showOptions = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (isArabic) (if (conversation.isPinned) "إلغاء التثبيت" else "تثبيت المحادثة") else (if (conversation.isPinned) "Unpin" else "Pin")) },
+                            leadingIcon = { Icon(Icons.Outlined.PushPin, null) },
+                            onClick = {
+                                showOptions = false
+                                onTogglePin()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (isArabic) (if (conversation.isArchived) "إلغاء الأرشفة" else "أرشفة المحادثة") else (if (conversation.isArchived) "Unarchive" else "Archive")) },
+                            leadingIcon = { Icon(Icons.Outlined.Archive, null) },
+                            onClick = {
+                                showOptions = false
+                                onToggleArchive()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (isArabic) "إعادة تسمية" else "Rename") },
+                            leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                            onClick = {
+                                showOptions = false
+                                onRename()
+                            }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text(if (isArabic) "حذف" else "Delete", color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Outlined.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                showOptions = false
+                                onDelete()
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun MainDrawerContent(
     settings: AppSettings,
     selectedModel: com.example.core.model.AiModel,
@@ -854,10 +1208,80 @@ fun MainDrawerContent(
     onNewChat: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateTo: (String) -> Unit,
-    onCloseDrawer: () -> Unit
+    onCloseDrawer: () -> Unit,
+    onRenameConversation: (String, String) -> Unit,
+    onDeleteConversation: (String) -> Unit,
+    onTogglePinConversation: (com.example.core.database.Conversation) -> Unit,
+    onToggleArchiveConversation: (com.example.core.database.Conversation) -> Unit
 ) {
     val isArabic = settings.language == AppLanguage.ARABIC
     val context = androidx.compose.ui.platform.LocalContext.current
+    
+    var conversationToRename by remember { mutableStateOf<Conversation?>(null) }
+    var renameNewTitle by remember { mutableStateOf("") }
+    var conversationToDelete by remember { mutableStateOf<Conversation?>(null) }
+
+    conversationToRename?.let { conversation ->
+        AlertDialog(
+            onDismissRequest = { conversationToRename = null },
+            title = { Text(if (isArabic) "إعادة تسمية المحادثة" else "Rename Conversation") },
+            text = {
+                OutlinedTextField(
+                    value = renameNewTitle,
+                    onValueChange = { renameNewTitle = it },
+                    label = { Text(if (isArabic) "العنوان الجديد" else "New Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (renameNewTitle.isNotBlank()) {
+                            onRenameConversation(conversation.id, renameNewTitle)
+                        }
+                        conversationToRename = null
+                    }
+                ) {
+                    Text(if (isArabic) "تأكيد" else "Confirm")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { conversationToRename = null }) {
+                    Text(if (isArabic) "إلغاء" else "Cancel")
+                }
+            }
+        )
+    }
+
+    conversationToDelete?.let { conversation ->
+        AlertDialog(
+            onDismissRequest = { conversationToDelete = null },
+            title = { Text(if (isArabic) "حذف المحادثة" else "Delete Conversation") },
+            text = {
+                Text(
+                    if (isArabic) "هل أنت متأكد من رغبتك في حذف هذه المحادثة نهائياً؟ لا يمكن التراجع عن هذا الإجراء."
+                    else "Are you sure you want to delete this conversation permanently? This action cannot be undone."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteConversation(conversation.id)
+                        conversationToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(if (isArabic) "حذف" else "Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { conversationToDelete = null }) {
+                    Text(if (isArabic) "إلغاء" else "Cancel")
+                }
+            }
+        )
+    }
 
     ModalDrawerSheet(
         drawerContainerColor = MaterialTheme.colorScheme.surface,
@@ -870,7 +1294,6 @@ fun MainDrawerContent(
                 .fillMaxSize()
                 .padding(vertical = 16.dp)
         ) {
-            // Header
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
@@ -892,12 +1315,10 @@ fun MainDrawerContent(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Scrollable Content
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                // Main Navigation
                 item {
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
@@ -926,8 +1347,21 @@ fun MainDrawerContent(
 
                 item {
                     NavigationDrawerItem(
+                        icon = { Icon(Icons.Outlined.BookmarkBorder, contentDescription = null) },
+                        label = { Text(if (isArabic) "المحادثات المحفوظة" else "Saved Chats") },
+                        selected = false,
+                        onClick = {
+                            onNavigateTo("saved")
+                            onCloseDrawer()
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+                }
+
+                item {
+                    NavigationDrawerItem(
                         icon = { Icon(Icons.Outlined.Folder, contentDescription = null) },
-                        label = { Text(if (isArabic) "الملفات" else "Files") },
+                        label = { Text(if (isArabic) "الملفات والمستندات" else "Files & Documents") },
                         selected = false,
                         onClick = {
                             onNavigateTo("files")
@@ -940,7 +1374,7 @@ fun MainDrawerContent(
                 item {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 16.dp))
                     Text(
-                        text = if (isArabic) "المحادثات" else "Chat History",
+                        text = if (isArabic) "سجل المحادثات" else "Chat History",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 8.dp)
@@ -957,86 +1391,89 @@ fun MainDrawerContent(
                         )
                     }
                 } else {
-                    items(conversations) { conversation ->
-                        NavigationDrawerItem(
-                            icon = { Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                            label = { 
-                                Text(
-                                    text = conversation.title,
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                ) 
-                            },
-                            selected = false,
-                            onClick = {
-                                onSelectConversation(conversation.id)
+                    items(conversations, key = { it.id }) { conversation ->
+                        SwipeableConversationItem(
+                            conversation = conversation,
+                            isArabic = isArabic,
+                            onSelectConversation = {
+                                onSelectConversation(it)
                                 onCloseDrawer()
                             },
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-
-                item {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 16.dp))
-                    Text(
-                        text = if (isArabic) "نموذج الذكاء الاصطناعي" else "AI Models",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 8.dp)
-                    )
-                }
-
-                item {
-                    val availableModels = listOf(
-                        com.example.core.model.AiModel.NABIH_ULTRA,
-                        com.example.core.model.AiModel.GPT_4O,
-                        com.example.core.model.AiModel.GEMINI_PRO,
-                        com.example.core.model.AiModel.CLAUDE_SONNET
-                    )
-                    
-                    availableModels.forEach { model ->
-                        val isLocked = when (model) {
-                            com.example.core.model.AiModel.NABIH_ULTRA -> false
-                            com.example.core.model.AiModel.GPT_4O -> settings.openaiApiKey.isEmpty()
-                            com.example.core.model.AiModel.GEMINI_PRO -> settings.googleApiKey.isEmpty()
-                            com.example.core.model.AiModel.CLAUDE_SONNET -> settings.anthropicApiKey.isEmpty()
-                            else -> false
-                        }
-                        NavigationDrawerItem(
-                            icon = {
-                                if (isLocked) {
-                                    Icon(Icons.Outlined.Lock, contentDescription = "Locked", modifier = Modifier.size(20.dp))
-                                } else {
-                                    Icon(Icons.Outlined.CheckCircle, contentDescription = "Ready", modifier = Modifier.size(20.dp), tint = if (selectedModel.id == model.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
+                            onRename = {
+                                renameNewTitle = conversation.title
+                                conversationToRename = conversation
                             },
-                            label = {
-                                Text(
-                                    text = model.displayName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (isLocked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
-                                )
+                            onDelete = {
+                                conversationToDelete = conversation
                             },
-                            selected = selectedModel.id == model.id,
-                            onClick = {
-                                if (isLocked) {
-                                    android.widget.Toast.makeText(context, if (isArabic) "مفتاح API مطلوب" else "API Key Required", android.widget.Toast.LENGTH_SHORT).show()
-                                    // Navigate to settings to add keys
-                                    onNavigateToSettings()
-                                    onCloseDrawer()
-                                } else {
-                                    onSelectModel(model)
-                                    onCloseDrawer()
-                                }
+                            onTogglePin = {
+                                onTogglePinConversation(conversation)
                             },
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                            onToggleArchive = {
+                                onToggleArchiveConversation(conversation)
+                            }
                         )
                     }
                 }
             }
 
-            // Bottom Section
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = selectedModel.displayName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = selectedModel.provider.displayName,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        modifier = Modifier.padding(start = 4.dp)
+                    ) {
+                        Text(
+                            text = if (isArabic) "نشط" else "Active",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             
             NavigationDrawerItem(

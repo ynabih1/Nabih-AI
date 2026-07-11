@@ -1,7 +1,9 @@
 package com.example.feature.tools
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -60,19 +62,6 @@ fun FilesScreen(onNavigateBack: () -> Unit, isArabic: Boolean) {
         }
     }
 }
-
-@Composable
-fun AiToolsScreen(onNavigateBack: () -> Unit, isArabic: Boolean) {
-    GenericFeatureScreen(
-        title = if (isArabic) "أدوات الذكاء الاصطناعي" else "AI Tools",
-        onNavigateBack = onNavigateBack
-    ) {
-        Box(modifier = Modifier.fillMaxSize().padding(it), contentAlignment = Alignment.Center) {
-            Text(if (isArabic) "أدوات الذكاء الاصطناعي قادمة قريباً." else "AI tools coming soon.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
 
 @Composable
 fun PrivacyScreen(onNavigateBack: () -> Unit, isArabic: Boolean) {

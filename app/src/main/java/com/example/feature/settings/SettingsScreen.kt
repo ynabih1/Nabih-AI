@@ -154,18 +154,18 @@ fun ApiKeysSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic
                     OutlinedTextField(
                         value = nabihKey,
                         onValueChange = { nabihKey = it },
-                        label = { Text(if (isArabic) "Nabih Ultra" else "Nabih Ultra") },
+                        label = { Text("Nabih Ultra") },
                         placeholder = { Text(if (isArabic) "الوضع المحلي (تلقائي)" else "Local Mode (Automatic)") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(value = googleKey, onValueChange = { googleKey = it }, label = { Text("Google Gemini Key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = openaiKey, onValueChange = { openaiKey = it }, label = { Text("OpenAI Key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = anthropicKey, onValueChange = { anthropicKey = it }, label = { Text("Anthropic Claude Key") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = googleKey, onValueChange = { googleKey = it }, label = { Text("Google Gemini") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = openaiKey, onValueChange = { openaiKey = it }, label = { Text("OpenAI") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = anthropicKey, onValueChange = { anthropicKey = it }, label = { Text("Anthropic Claude") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                     
                     if (validationMessage.isNotEmpty()) {
-                        Text(text = validationMessage, style = MaterialTheme.typography.bodySmall, color = if (validationMessage.contains("Error") || validationMessage.contains("خطأ") || validationMessage.contains("غير صالح") || validationMessage.contains("Invalid")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                        Text(text = validationMessage, style = MaterialTheme.typography.bodySmall, color = if (validationMessage.contains("Error") || validationMessage.contains("خطأ") || validationMessage.contains("غير صالح") || validationMessage.contains("Invalid") || validationMessage.contains("فشل") || validationMessage.contains("failed") || validationMessage.contains("HTTP")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                     }
 
                     Row(
@@ -177,7 +177,9 @@ fun ApiKeysSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic
                                 isValidating = true
                                 validationMessage = if (isArabic) "جاري التحقق من المفاتيح..." else "Validating API keys..."
                                 coroutineScope.launch {
-                                    val result = viewModel.validateAndSaveApiKeys(nabihKey, googleKey, openaiKey, anthropicKey, isArabic)
+                                    val result = viewModel.validateAndSaveApiKeys(
+                                        nabihKey, googleKey, openaiKey, anthropicKey, isArabic
+                                    )
                                     isValidating = false
                                     validationMessage = result.second
                                     if (result.first) {

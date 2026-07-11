@@ -36,16 +36,20 @@ class SettingsRepository(context: Context) {
             prefs.edit().putString("user_email", userEmail).apply()
         }
 
-        val googleEmail = prefs.getString("google_email", "") ?: ""
-        val googleName = prefs.getString("google_name", "") ?: ""
         val microsoftEmail = prefs.getString("microsoft_email", "") ?: ""
         val microsoftName = prefs.getString("microsoft_name", "") ?: ""
+
+        val defaultModelVal = try {
+            AiModel.valueOf(modelStr)
+        } catch (e: Exception) {
+            AiModel.NABIH_ULTRA
+        }
 
         return AppSettings(
             theme = AppTheme.valueOf(themeStr),
             language = AppLanguage.valueOf(langStr),
             fontSize = FontSize.valueOf(fontStr),
-            defaultModel = AiModel.valueOf(modelStr),
+            defaultModel = defaultModelVal,
             voiceEnabled = prefs.getBoolean("voice_enabled", true),
             hapticFeedback = prefs.getBoolean("haptic_feedback", true),
             nabihApiKey = secureStorage.getKey("key_nabih"),
@@ -56,8 +60,6 @@ class SettingsRepository(context: Context) {
             authType = prefs.getString("auth_type", "") ?: "",
             userEmail = userEmail,
             userName = userName,
-            googleEmail = googleEmail,
-            googleName = googleName,
             microsoftEmail = microsoftEmail,
             microsoftName = microsoftName,
             biometricsEnabled = prefs.getBoolean("biometrics_enabled", false),
@@ -69,14 +71,6 @@ class SettingsRepository(context: Context) {
         )
     }
 
-    fun updateGoogleAccount(email: String, name: String) {
-        prefs.edit()
-            .putString("google_email", email)
-            .putString("google_name", name)
-            .apply()
-        _settings.value = loadSettings()
-    }
-
     fun updateMicrosoftAccount(email: String, name: String) {
         prefs.edit()
             .putString("microsoft_email", email)
@@ -86,16 +80,12 @@ class SettingsRepository(context: Context) {
     }
 
     fun switchActiveAccount(authType: String) {
-        val email = if (authType == "GOOGLE") {
-            prefs.getString("google_email", "") ?: ""
-        } else if (authType == "MICROSOFT") {
+        val email = if (authType == "MICROSOFT") {
             prefs.getString("microsoft_email", "") ?: ""
         } else {
             ""
         }
-        val name = if (authType == "GOOGLE") {
-            prefs.getString("google_name", "") ?: ""
-        } else if (authType == "MICROSOFT") {
+        val name = if (authType == "MICROSOFT") {
             prefs.getString("microsoft_name", "") ?: ""
         } else {
             ""
@@ -120,12 +110,7 @@ class SettingsRepository(context: Context) {
             .apply()
         
         if (isLoggedIn) {
-            if (authType == "GOOGLE") {
-                prefs.edit()
-                    .putString("google_email", userEmail)
-                    .putString("google_name", userName)
-                    .apply()
-            } else if (authType == "MICROSOFT") {
+            if (authType == "MICROSOFT") {
                 prefs.edit()
                     .putString("microsoft_email", userEmail)
                     .putString("microsoft_name", userName)
@@ -213,4 +198,5 @@ class SettingsRepository(context: Context) {
         secureStorage.saveKey("key_anthropic", anthropic)
         _settings.value = loadSettings()
     }
+
 }

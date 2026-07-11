@@ -139,7 +139,7 @@ fun AccountScreen(
                     }
                 }
 
-                if (settings.googleEmail.isNotEmpty() || settings.microsoftEmail.isNotEmpty()) {
+                if (settings.microsoftEmail.isNotEmpty()) {
                     Text(
                         text = if (isArabic) "الجلسات المحفوظة" else "Saved Provider Sessions",
                         style = MaterialTheme.typography.labelLarge,
@@ -153,41 +153,20 @@ fun AccountScreen(
                         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
                         Column {
-                            if (settings.googleEmail.isNotEmpty()) {
-                                ListItem(
-                                    headlineContent = { Text("Google Account") },
-                                    supportingContent = { Text(settings.googleEmail) },
-                                    leadingContent = { Icon(Icons.Outlined.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                                    trailingContent = {
-                                        if (settings.authType == "GOOGLE") {
-                                            Icon(Icons.Filled.CheckCircle, "Active", tint = MaterialTheme.colorScheme.primary)
-                                        } else {
-                                            TextButton(onClick = { settingsViewModel.switchActiveAccount("GOOGLE") }) {
-                                                Text(if (isArabic) "تبديل" else "Switch")
-                                            }
+                            ListItem(
+                                headlineContent = { Text("Microsoft Account") },
+                                supportingContent = { Text(settings.microsoftEmail) },
+                                leadingContent = { Icon(Icons.Outlined.Person, contentDescription = null, tint = MaterialTheme.colorScheme.secondary) },
+                                trailingContent = {
+                                    if (settings.authType == "MICROSOFT") {
+                                        Icon(Icons.Filled.CheckCircle, "Active", tint = MaterialTheme.colorScheme.primary)
+                                    } else {
+                                        TextButton(onClick = { settingsViewModel.switchActiveAccount("MICROSOFT") }) {
+                                            Text(if (isArabic) "تبديل" else "Switch")
                                         }
                                     }
-                                )
-                            }
-                            if (settings.googleEmail.isNotEmpty() && settings.microsoftEmail.isNotEmpty()) {
-                                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                            }
-                            if (settings.microsoftEmail.isNotEmpty()) {
-                                ListItem(
-                                    headlineContent = { Text("Microsoft Account") },
-                                    supportingContent = { Text(settings.microsoftEmail) },
-                                    leadingContent = { Icon(Icons.Outlined.Person, contentDescription = null, tint = MaterialTheme.colorScheme.secondary) },
-                                    trailingContent = {
-                                        if (settings.authType == "MICROSOFT") {
-                                            Icon(Icons.Filled.CheckCircle, "Active", tint = MaterialTheme.colorScheme.primary)
-                                        } else {
-                                            TextButton(onClick = { settingsViewModel.switchActiveAccount("MICROSOFT") }) {
-                                                Text(if (isArabic) "تبديل" else "Switch")
-                                            }
-                                        }
-                                    }
-                                )
-                            }
+                                }
+                            )
                         }
                     }
                 }
