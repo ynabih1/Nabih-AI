@@ -47,6 +47,7 @@ android {
       signingConfig = signingConfigs.getByName("release")
     }
     debug {
+      signingConfig = signingConfigs.getByName("debugConfig")
     }
   }
   compileOptions {
@@ -106,14 +107,11 @@ dependencies {
   implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
-  // implementation(libs.play.services.auth)
+  implementation(libs.play.services.auth)
   implementation(libs.androidx.security.crypto)
   // implementation(libs.androidx.credentials)
   // implementation(libs.androidx.credentials.play.services.auth)
   // implementation(libs.googleid)
-  implementation(libs.msal) {
-      exclude(group = "com.microsoft.device.display", module = "display-mask")
-  }
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
   testImplementation(libs.androidx.compose.ui.test.junit4)

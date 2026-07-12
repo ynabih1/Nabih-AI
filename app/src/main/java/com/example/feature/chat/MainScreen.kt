@@ -39,6 +39,12 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,11 +95,39 @@ fun MainScreen(
     val streamResponse by chatViewModel.currentStreamingResponse.collectAsStateWithLifecycle()
     val selectedModel by chatViewModel.selectedModel.collectAsStateWithLifecycle()
     val inputText by chatViewModel.currentInputText.collectAsStateWithLifecycle()
+    val searchEnabled by chatViewModel.searchEnabled.collectAsStateWithLifecycle()
+    val searchQuery by chatViewModel.searchQuery.collectAsStateWithLifecycle()
     val context = LocalContext.current
     
     
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(selectedModel, settings) {
+        if (selectedModel.id != com.example.core.model.AiModel.NABIH_ULTRA.id) {
+            val isProviderValid = when (selectedModel.provider) {
+                com.example.core.model.ApiProvider.NABIH -> true
+                com.example.core.model.ApiProvider.GOOGLE -> settings.googleApiKey.isNotEmpty() || settings.nabihApiKey.isNotEmpty()
+                com.example.core.model.ApiProvider.OPENAI -> settings.openaiApiKey.isNotEmpty()
+                com.example.core.model.ApiProvider.ANTHROPIC -> settings.anthropicApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.GROK -> settings.grokApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.DEEPSEEK -> settings.deepseekApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.MISTRAL -> settings.mistralApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.OPENROUTER -> settings.openRouterApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.OLLAMA -> settings.ollamaEndpoint.isNotEmpty()
+                                        com.example.core.model.ApiProvider.LMSTUDIO -> settings.lmStudioEndpoint.isNotEmpty()
+                com.example.core.model.ApiProvider.GROK -> settings.grokApiKey.isNotEmpty()
+                com.example.core.model.ApiProvider.DEEPSEEK -> settings.deepseekApiKey.isNotEmpty()
+                com.example.core.model.ApiProvider.MISTRAL -> settings.mistralApiKey.isNotEmpty()
+                com.example.core.model.ApiProvider.OPENROUTER -> settings.openRouterApiKey.isNotEmpty()
+                com.example.core.model.ApiProvider.OLLAMA -> settings.ollamaEndpoint.isNotEmpty()
+                com.example.core.model.ApiProvider.LMSTUDIO -> settings.lmStudioEndpoint.isNotEmpty()
+            }
+            if (!isProviderValid) {
+                chatViewModel.selectModel(com.example.core.model.AiModel.NABIH_ULTRA)
+            }
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -153,19 +187,25 @@ fun MainScreen(
                         }
                     },
                     actions = {
-                        var modelMenuExpanded by remember { mutableStateOf(false) }
-                        Box {
-                            TextButton(
-                                onClick = { modelMenuExpanded = true },
-                                modifier = Modifier.padding(end = 4.dp),
-                                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            ) {
-                                Text(text = selectedModel.displayName.split(" ").firstOrNull() ?: selectedModel.displayName, style = MaterialTheme.typography.labelLarge)
-                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
-                            }
-                            DropdownMenu(
+                        val hasApiKey = settings.googleApiKey.isNotEmpty() || 
+                                        settings.nabihApiKey.isNotEmpty() || 
+                                        settings.openaiApiKey.isNotEmpty() || 
+                                        settings.anthropicApiKey.isNotEmpty()
+                                        
+                        if (hasApiKey) {
+                            var modelMenuExpanded by remember { mutableStateOf(false) }
+                            Box {
+                                TextButton(
+                                    onClick = { modelMenuExpanded = true },
+                                    modifier = Modifier.padding(end = 4.dp),
+                                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                ) {
+                                    Text(text = selectedModel.displayName.split(" ").firstOrNull() ?: selectedModel.displayName, style = MaterialTheme.typography.labelLarge)
+                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
+                                }
+                                DropdownMenu(
                                 expanded = modelMenuExpanded,
                                 onDismissRequest = { modelMenuExpanded = false },
                                 modifier = Modifier.width(320.dp).background(MaterialTheme.colorScheme.surface)
@@ -173,9 +213,18 @@ fun MainScreen(
                                 val registryModels = com.example.core.model.ModelRegistry.getModels(context).filter { model ->
                                     when (model.provider) {
                                         com.example.core.model.ApiProvider.NABIH -> true
-                                        com.example.core.model.ApiProvider.GOOGLE -> settings.googleApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.GOOGLE -> {
+                                            settings.googleApiKey.isNotEmpty() || 
+                                             settings.nabihApiKey.isNotEmpty()
+                                        }
                                         com.example.core.model.ApiProvider.OPENAI -> settings.openaiApiKey.isNotEmpty()
                                         com.example.core.model.ApiProvider.ANTHROPIC -> settings.anthropicApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.GROK -> settings.grokApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.DEEPSEEK -> settings.deepseekApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.MISTRAL -> settings.mistralApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.OPENROUTER -> settings.openRouterApiKey.isNotEmpty()
+                                        com.example.core.model.ApiProvider.OLLAMA -> settings.ollamaEndpoint.isNotEmpty()
+                                        com.example.core.model.ApiProvider.LMSTUDIO -> settings.lmStudioEndpoint.isNotEmpty()
                                     }
                                 }
                                 
@@ -286,6 +335,22 @@ fun MainScreen(
                                     )
                                 }
                             }
+                            }
+                        } else {
+                            TextButton(
+                                onClick = { },
+                                modifier = Modifier.padding(end = 4.dp),
+                                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                enabled = false
+                            ) {
+                                Text(
+                                    text = "Nabih Ultra",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -301,6 +366,60 @@ fun MainScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
+                if (searchEnabled) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            TextField(
+                                value = searchQuery,
+                                onValueChange = { chatViewModel.setSearchQuery(it) },
+                                placeholder = { Text(if (isArabic) "ابحث في المحادثة..." else "Search in conversation...") },
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                ),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { chatViewModel.setSearchQuery("") }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Clear,
+                                        contentDescription = "Clear",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { 
+                                chatViewModel.setSearchQuery("")
+                                chatViewModel.toggleSearch() 
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Chat Area
                 Box(modifier = Modifier.weight(1f)) {
                     when (val state = chatState) {
@@ -331,9 +450,14 @@ fun MainScreen(
                         }
                         is ChatUiState.Success -> {
                             val listState = rememberLazyListState()
-                            LaunchedEffect(state.messages.size, streamResponse) {
-                                if (state.messages.isNotEmpty()) {
-                                    listState.animateScrollToItem(state.messages.lastIndex + (if (isGenerating) 1 else 0))
+                            val filteredMessages = if (searchQuery.isBlank()) {
+                                state.messages
+                            } else {
+                                state.messages.filter { it.content.contains(searchQuery, ignoreCase = true) }
+                            }
+                            LaunchedEffect(filteredMessages.size, streamResponse) {
+                                if (filteredMessages.isNotEmpty()) {
+                                    listState.animateScrollToItem(filteredMessages.lastIndex + (if (isGenerating) 1 else 0))
                                 }
                             }
                             LazyColumn(
@@ -342,7 +466,7 @@ fun MainScreen(
                                 contentPadding = PaddingValues(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                items(state.messages) { message ->
+                                items(filteredMessages) { message ->
                                     MessageItem(
                                         message = message,
                                         isArabic = isArabic,
@@ -918,95 +1042,152 @@ fun BottomInputArea(
                 }
             }
 
-            Row(
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.Bottom
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .defaultMinSize(minHeight = 56.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         ) {
-            Box {
-                IconButton(onClick = { showAttachmentMenu = true }, modifier = Modifier.padding(bottom = 4.dp)) {
-                    Icon(Icons.Outlined.AttachFile, contentDescription = "Attach")
-                }
-                
-                DropdownMenu(
-                    expanded = showAttachmentMenu,
-                    onDismissRequest = { showAttachmentMenu = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(if (isArabic) "صورة من المعرض" else "Image from Gallery") },
-                        onClick = { 
-                            showAttachmentMenu = false
-                            imagePicker.launch(arrayOf("image/*")) 
-                        },
-                        leadingIcon = { Icon(Icons.Outlined.Image, null) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(if (isArabic) "مستند / ملف" else "Document / File") },
-                        onClick = { 
-                            showAttachmentMenu = false
-                            docPicker.launch(arrayOf("*/*")) 
-                        },
-                        leadingIcon = { Icon(Icons.Outlined.Description, null) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(if (isArabic) "الكاميرا" else "Camera") },
-                        onClick = { 
-                            showAttachmentMenu = false
-                            cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA) 
-                        },
-                        leadingIcon = { Icon(Icons.Outlined.CameraAlt, null) }
-                    )
-                }
-            }
-            
-            OutlinedTextField(
-                value = text,
-                onValueChange = onTextChange,
-                placeholder = { Text(if (isArabic) "اكتب رسالة..." else "Message Nabih AI...") },
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp),
-                shape = RoundedCornerShape(24.dp),
-                maxLines = 5,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-            
-            if (isGenerating) {
-                IconButton(
-                    onClick = onStop,
-                    modifier = Modifier
-                        .padding(bottom = 4.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.errorContainer)
-                ) {
-                    Icon(Icons.Default.Stop, contentDescription = "Stop", tint = MaterialTheme.colorScheme.onErrorContainer)
-                }
-            } else {
-                if (text.isNotBlank() || attachedImageUri != null || attachedDocUri != null) {
+            Row(
+                modifier = Modifier.padding(end = 4.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Box {
                     IconButton(
-                        onClick = {
-                            onSend(text)
-                        },
-                        modifier = Modifier
-                            .padding(bottom = 4.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.onPrimary)
-                    }
-                } else {
-                    IconButton(
-                        onClick = onVoice,
+                        onClick = { showAttachmentMenu = true }, 
                         modifier = Modifier.padding(bottom = 4.dp)
                     ) {
-                        Icon(Icons.Default.Mic, contentDescription = "Voice")
+                        Icon(
+                            Icons.Outlined.Add, 
+                            contentDescription = "Attach", 
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    
+                    DropdownMenu(
+                        expanded = showAttachmentMenu,
+                        onDismissRequest = { showAttachmentMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (isArabic) "صورة من المعرض" else "Image from Gallery") },
+                            onClick = { 
+                                showAttachmentMenu = false
+                                imagePicker.launch(arrayOf("image/*")) 
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.Image, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (isArabic) "مستند / ملف" else "Document / File") },
+                            onClick = { 
+                                showAttachmentMenu = false
+                                docPicker.launch(arrayOf("*/*")) 
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.Description, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (isArabic) "الكاميرا" else "Camera") },
+                            onClick = { 
+                                showAttachmentMenu = false
+                                cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA) 
+                            },
+                            leadingIcon = { Icon(Icons.Outlined.CameraAlt, null) }
+                        )
+                    }
+                }
+                
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 16.dp, horizontal = 4.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (text.isEmpty()) {
+                        Text(
+                            text = if (isArabic) "اكتب رسالة..." else "Message Nabih AI...",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                    BasicTextField(
+                        value = text,
+                        onValueChange = onTextChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                        maxLines = 6
+                    )
+                }
+                
+                Box(
+                    modifier = Modifier.padding(bottom = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AnimatedContent(
+                        targetState = when {
+                            isGenerating -> 0
+                            text.isNotBlank() || attachedImageUri != null || attachedDocUri != null -> 1
+                            else -> 2
+                        },
+                        transitionSpec = {
+                            scaleIn(animationSpec = tween(150)) togetherWith scaleOut(animationSpec = tween(150))
+                        },
+                        label = "input_action"
+                    ) { state ->
+                        when (state) {
+                            0 -> {
+                                IconButton(
+                                    onClick = onStop,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.errorContainer)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Stop, 
+                                        contentDescription = "Stop", 
+                                        tint = MaterialTheme.colorScheme.onErrorContainer, 
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                            1 -> {
+                                IconButton(
+                                    onClick = { onSend(text) },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.Send, 
+                                        contentDescription = "Send", 
+                                        tint = MaterialTheme.colorScheme.onPrimary, 
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            2 -> {
+                                IconButton(
+                                    onClick = onVoice,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(androidx.compose.ui.graphics.Color.Transparent)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Mic, 
+                                        contentDescription = "Voice", 
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant, 
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1332,18 +1513,7 @@ fun MainDrawerContent(
                     )
                 }
 
-                item {
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                        label = { Text(if (isArabic) "البحث" else "Search") },
-                        selected = false,
-                        onClick = {
-                            onNavigateTo("search")
-                            onCloseDrawer()
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-                }
+
 
                 item {
                     NavigationDrawerItem(

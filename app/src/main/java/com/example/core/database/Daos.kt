@@ -80,3 +80,19 @@ interface MemoryDao {
     @Query("DELETE FROM memory_items")
     suspend fun deleteAllMemories()
 }
+
+@Dao
+interface UserAccountDao {
+    @Query("SELECT * FROM user_accounts WHERE email = :email LIMIT 1")
+    suspend fun getUserByEmail(email: String): UserAccount?
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertUser(userAccount: UserAccount)
+
+    @Query("UPDATE user_accounts SET name = :name WHERE email = :email")
+    suspend fun updateUserName(email: String, name: String)
+    
+    @Query("UPDATE user_accounts SET email = :newEmail WHERE email = :oldEmail")
+    suspend fun updateUserEmail(oldEmail: String, newEmail: String)
+}
+

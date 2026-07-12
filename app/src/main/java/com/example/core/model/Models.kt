@@ -4,7 +4,13 @@ enum class ApiProvider(val displayName: String) {
     NABIH("Nabih AI"),
     GOOGLE("Google Gemini"),
     OPENAI("OpenAI ChatGPT"),
-    ANTHROPIC("Anthropic Claude")
+    ANTHROPIC("Anthropic Claude"),
+    GROK("xAI Grok"),
+    DEEPSEEK("DeepSeek"),
+    MISTRAL("Mistral AI"),
+    OPENROUTER("OpenRouter"),
+    OLLAMA("Ollama"),
+    LMSTUDIO("LM Studio")
 }
 
 enum class AiModel(
@@ -87,12 +93,22 @@ data class AppSettings(
     val googleApiKey: String = "",
     val openaiApiKey: String = "",
     val anthropicApiKey: String = "",
+    val grokApiKey: String = "",
+    val deepseekApiKey: String = "",
+    val mistralApiKey: String = "",
+    val openRouterApiKey: String = "",
+    val ollamaEndpoint: String = "",
+    val lmStudioEndpoint: String = "",
     val isLoggedIn: Boolean = false,
     val authType: String = "", // "GUEST", "GOOGLE", "MICROSOFT", "EMAIL", "PASSKEY"
     val userEmail: String = "",
     val userName: String = "",
+    val profilePictureUri: String = "",
+    val personalInfo: String = "",
     val microsoftEmail: String = "",
     val microsoftName: String = "",
+    val googleEmail: String = "",
+    val googleName: String = "",
     val biometricsEnabled: Boolean = false,
     val responseStyle: ResponseStyle = ResponseStyle.BALANCED,
     val memoryEnabled: Boolean = true,

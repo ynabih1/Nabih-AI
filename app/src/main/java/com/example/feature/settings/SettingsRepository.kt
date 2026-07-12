@@ -38,6 +38,10 @@ class SettingsRepository(context: Context) {
 
         val microsoftEmail = prefs.getString("microsoft_email", "") ?: ""
         val microsoftName = prefs.getString("microsoft_name", "") ?: ""
+        val googleEmail = prefs.getString("google_email", "") ?: ""
+        val googleName = prefs.getString("google_name", "") ?: ""
+        val profilePictureUri = prefs.getString("profile_picture_uri", "") ?: ""
+        val personalInfo = prefs.getString("personal_info", "") ?: ""
 
         val defaultModelVal = try {
             AiModel.valueOf(modelStr)
@@ -56,12 +60,22 @@ class SettingsRepository(context: Context) {
             googleApiKey = secureStorage.getKey("key_google"),
             openaiApiKey = secureStorage.getKey("key_openai"),
             anthropicApiKey = secureStorage.getKey("key_anthropic"),
+            grokApiKey = secureStorage.getKey("key_grok"),
+            deepseekApiKey = secureStorage.getKey("key_deepseek"),
+            mistralApiKey = secureStorage.getKey("key_mistral"),
+            openRouterApiKey = secureStorage.getKey("key_openrouter"),
+            ollamaEndpoint = secureStorage.getKey("key_ollama"),
+            lmStudioEndpoint = secureStorage.getKey("key_lmstudio"),
             isLoggedIn = prefs.getBoolean("is_logged_in", false),
             authType = prefs.getString("auth_type", "") ?: "",
             userEmail = userEmail,
             userName = userName,
+            profilePictureUri = profilePictureUri,
+            personalInfo = personalInfo,
             microsoftEmail = microsoftEmail,
             microsoftName = microsoftName,
+            googleEmail = googleEmail,
+            googleName = googleName,
             biometricsEnabled = prefs.getBoolean("biometrics_enabled", false),
             responseStyle = ResponseStyle.valueOf(prefs.getString("response_style", ResponseStyle.BALANCED.name) ?: ResponseStyle.BALANCED.name),
             memoryEnabled = prefs.getBoolean("memory_enabled", true),
@@ -80,15 +94,15 @@ class SettingsRepository(context: Context) {
     }
 
     fun switchActiveAccount(authType: String) {
-        val email = if (authType == "MICROSOFT") {
-            prefs.getString("microsoft_email", "") ?: ""
-        } else {
-            ""
+        val email = when (authType) {
+            "MICROSOFT" -> prefs.getString("microsoft_email", "") ?: ""
+            "GOOGLE" -> prefs.getString("google_email", "") ?: ""
+            else -> ""
         }
-        val name = if (authType == "MICROSOFT") {
-            prefs.getString("microsoft_name", "") ?: ""
-        } else {
-            ""
+        val name = when (authType) {
+            "MICROSOFT" -> prefs.getString("microsoft_name", "") ?: ""
+            "GOOGLE" -> prefs.getString("google_name", "") ?: ""
+            else -> ""
         }
         if (email.isNotEmpty()) {
             prefs.edit()
@@ -102,19 +116,41 @@ class SettingsRepository(context: Context) {
     }
 
     fun updateLoginState(isLoggedIn: Boolean, authType: String, userEmail: String, userName: String) {
+        val currentEmail = prefs.getString("user_email", "") ?: ""
+        
         prefs.edit()
             .putBoolean("is_logged_in", isLoggedIn)
             .putString("auth_type", authType)
-            .putString("user_email", userEmail)
-            .putString("user_name", userName)
             .apply()
         
         if (isLoggedIn) {
-            if (authType == "MICROSOFT") {
-                prefs.edit()
-                    .putString("microsoft_email", userEmail)
-                    .putString("microsoft_name", userName)
-                    .apply()
+            // Prevent duplicates: link with existing user if the email matches case-insensitively
+            val targetEmail = if (currentEmail.isNotEmpty() && currentEmail.lowercase().trim() == userEmail.lowercase().trim()) {
+                currentEmail
+            } else {
+                userEmail
+            }
+            
+            val targetName = if (userName.isNotEmpty()) userName else (prefs.getString("user_name", "") ?: "")
+            
+            prefs.edit()
+                .putString("user_email", targetEmail)
+                .putString("user_name", targetName)
+                .apply()
+            
+            when (authType) {
+                "MICROSOFT" -> {
+                    prefs.edit()
+                        .putString("microsoft_email", userEmail)
+                        .putString("microsoft_name", userName)
+                        .apply()
+                }
+                "GOOGLE" -> {
+                    prefs.edit()
+                        .putString("google_email", userEmail)
+                        .putString("google_name", userName)
+                        .apply()
+                }
             }
         }
         _settings.value = loadSettings()
@@ -137,6 +173,43 @@ class SettingsRepository(context: Context) {
 
     fun updateTheme(theme: AppTheme) {
         prefs.edit().putString("theme", theme.name).apply()
+        _settings.value = loadSettings()
+    }
+
+    suspend fun updateProfile(name: String, pictureUri: String, info: String, newEmail: String = "") {
+        val oldEmail = prefs.getString("user_email", "") ?: ""
+        
+        prefs.edit()
+            .putString("user_name", name.trim())
+            .putString("profile_picture_uri", pictureUri)
+            .putString("personal_info", info.trim())
+            .apply()
+            
+        if (newEmail.isNotBlank() && oldEmail.isNotBlank() && oldEmail.lowercase() != newEmail.lowercase()) {
+            val trimmedNewEmail = newEmail.trim().lowercase()
+            userAccountDao.updateUserEmail(oldEmail.trim().lowercase(), trimmedNewEmail)
+            prefs.edit().putString("user_email", trimmedNewEmail).apply()
+        }
+        
+        val currentEmail = prefs.getString("user_email", "") ?: ""
+        if (currentEmail.isNotEmpty()) {
+            val trimmedEmail = currentEmail.trim().lowercase()
+            userAccountDao.updateUserName(trimmedEmail, name.trim())
+        }
+        
+        val authType = prefs.getString("auth_type", "") ?: ""
+        when (authType) {
+            "MICROSOFT" -> {
+                prefs.edit()
+                    .putString("microsoft_name", name.trim())
+                    .apply()
+            }
+            "GOOGLE" -> {
+                prefs.edit()
+                    .putString("google_name", name.trim())
+                    .apply()
+            }
+        }
         _settings.value = loadSettings()
     }
 
@@ -190,13 +263,48 @@ class SettingsRepository(context: Context) {
         nabih: String,
         google: String,
         openai: String,
-        anthropic: String
+        anthropic: String,
+        grok: String = "",
+        deepseek: String = "",
+        mistral: String = "",
+        openRouter: String = "",
+        ollama: String = "",
+        lmStudio: String = ""
     ) {
         secureStorage.saveKey("key_nabih", nabih)
         secureStorage.saveKey("key_google", google)
         secureStorage.saveKey("key_openai", openai)
         secureStorage.saveKey("key_anthropic", anthropic)
+        secureStorage.saveKey("key_grok", grok)
+        secureStorage.saveKey("key_deepseek", deepseek)
+        secureStorage.saveKey("key_mistral", mistral)
+        secureStorage.saveKey("key_openrouter", openRouter)
+        secureStorage.saveKey("key_ollama", ollama)
+        secureStorage.saveKey("key_lmstudio", lmStudio)
         _settings.value = loadSettings()
     }
 
+    private val userAccountDao by lazy {
+        com.example.core.database.AppDatabase.getDatabase(context).userAccountDao()
+    }
+
+    suspend fun getUserByEmail(email: String): com.example.core.database.UserAccount? {
+        val trimmedEmail = email.trim().lowercase()
+        return userAccountDao.getUserByEmail(trimmedEmail)
+    }
+
+    suspend fun registerUser(email: String, name: String, passwordHash: String): Boolean {
+        val trimmedEmail = email.trim().lowercase()
+        val existing = userAccountDao.getUserByEmail(trimmedEmail)
+        if (existing != null) {
+            return false
+        }
+        val newUser = com.example.core.database.UserAccount(
+            email = trimmedEmail,
+            name = name.trim(),
+            passwordHash = passwordHash
+        )
+        userAccountDao.insertUser(newUser)
+        return true
+    }
 }

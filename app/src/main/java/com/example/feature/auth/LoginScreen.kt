@@ -35,6 +35,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -46,10 +47,9 @@ import kotlinx.coroutines.launch
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import com.microsoft.identity.client.AuthenticationCallback
-import com.microsoft.identity.client.IAuthenticationResult
-import com.microsoft.identity.client.AuthenticationResult
-import com.microsoft.identity.client.exception.MsalException
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,11 +66,6 @@ fun LoginScreen(
 
     val activity = context as? Activity
 
-    // Initialize MSAL once on startup
-    LaunchedEffect(Unit) {
-        AuthManager.initMsal(context)
-    }
-
     // Login screen states
     var currentStep by remember { mutableStateOf(0) } // 0: Onboarding, 1: Sign In Options, 2: Email Form, 3: Sign Up Form
     var emailInput by remember { mutableStateOf("") }
@@ -78,6 +73,77 @@ fun LoginScreen(
     var nameInput by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val googleId = com.example.BuildConfig.GOOGLE_CLIENT_ID
+        if (googleId.isEmpty() || googleId.contains("YOUR_") || googleId.contains("placeholder")) {
+            android.util.Log.w("LoginScreen", "Google Client ID is missing or not configured correctly.")
+        }
+    }
+
+    // Google Sign-In Error state
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        android.util.Log.d("LoginScreen", "Google Sign-In callback received. Result code: ${result.resultCode}")
+        if (result.resultCode == Activity.RESULT_OK) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                val email = account?.email ?: ""
+                val name = account?.displayName ?: ""
+                android.util.Log.d("LoginScreen", "Google Sign-In successful. Email: $email, Name: $name")
+                if (email.isNotEmpty()) {
+                    scope.launch {
+                        isLoading = true
+                        var registeredUser = settingsViewModel.getUserByEmail(email)
+                        if (registeredUser == null) {
+                            android.util.Log.d("LoginScreen", "User not found locally. Registering implicitly for OAuth.")
+                            val defaultName = if (name.isNotBlank()) name else email.substringBefore("@")
+                            settingsViewModel.registerUser(email, defaultName, "oauth_google")
+                            registeredUser = settingsViewModel.getUserByEmail(email)
+                        } else {
+                            android.util.Log.d("LoginScreen", "User found locally. Proceeding to login.")
+                        }
+                        isLoading = false
+                        if (registeredUser != null) {
+                            settingsViewModel.updateLoginState(true, "GOOGLE", email, name.ifBlank { registeredUser.name })
+                            Toast.makeText(context, if (isArabic) "مرحباً بك ${registeredUser.name}" else "Welcome, ${registeredUser.name}!", Toast.LENGTH_SHORT).show()
+                            onLoginSuccess()
+                        } else {
+                            android.util.Log.e("LoginScreen", "Failed to retrieve or register user locally after Google Sign-In.")
+                            val msg = if (isArabic) {
+                                "الحساب غير موجود. يرجى إنشاء حساب أولاً."
+                            } else {
+                                "Account not found. Please create an account first."
+                            }
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } else {
+                    android.util.Log.w("LoginScreen", "Google Sign-In succeeded but email was empty.")
+                    Toast.makeText(context, if (isArabic) "فشل الحصول على معلومات حساب Google." else "Failed to retrieve Google account info.", Toast.LENGTH_LONG).show()
+                }
+            } catch (e: ApiException) {
+                android.util.Log.e("LoginScreen", "Google Sign-In failed with ApiException. Code: ${e.statusCode}, Message: ${e.message}", e)
+                val errorMsg = if (isArabic) {
+                    "فشل تسجيل الدخول بـ Google (كود: ${e.statusCode})"
+                } else {
+                    "Google Sign-In failed (code: ${e.statusCode})"
+                }
+                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+            }
+        } else {
+            android.util.Log.w("LoginScreen", "Google Sign-In failed or was cancelled. Result code: ${result.resultCode}")
+            val errorMsg = if (isArabic) {
+                "تم إلغاء تسجيل الدخول بـ Google."
+            } else {
+                "Google Sign-In was cancelled."
+            }
+            Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+        }
+    }
 
 
 
@@ -318,50 +384,40 @@ fun LoginScreen(
 
 
 
-                                // Custom Sign In Microsoft (Original Minimalist Design)
+                                 // Google Sign In Button (Premium Minimalist Design)
                                 OutlinedButton(
                                     onClick = {
-                                        if (activity != null) {
-                                            isLoading = true
-                                            AuthManager.signInWithMicrosoft(
-                                                activity,
-                                                object : AuthenticationCallback {
-                                                    override fun onSuccess(authenticationResult: IAuthenticationResult) {
-                                                        isLoading = false
-                                                        val account = authenticationResult.account
-                                                        val email = account.username
-                                                        val name = account.claims?.get("name") as? String ?: ""
-                                                        val idToken = authenticationResult.accessToken
-                                                        // Token is retrieved from accessToken
-
-                                                        if (idToken != null && AuthManager.isTokenStructurallyValid(idToken)) {
-                                                            settingsViewModel.updateLoginState(true, "MICROSOFT", email, name)
-                                                            Toast.makeText(context, if (isArabic) "مرحباً بك $name" else "Welcome, $name!", Toast.LENGTH_SHORT).show()
-                                                            onLoginSuccess()
-                                                        } else {
-                                                            Toast.makeText(context, if (isArabic) "فشل التحقق من صحة رمز الهوية من Microsoft." else "Microsoft identity token validation failed.", Toast.LENGTH_LONG).show()
-                                                        }
-                                                    }
-
-                                                    override fun onError(exception: MsalException) {
-                                                        isLoading = false
-                                                        Toast.makeText(context, if (isArabic) "فشل تسجيل الدخول بـ Microsoft: ${exception.message}" else "Microsoft Sign-In failed: ${exception.message}", Toast.LENGTH_LONG).show()
-                                                    }
-
-                                                    override fun onCancel() {
-                                                        isLoading = false
-                                                        Toast.makeText(context, if (isArabic) "تم إلغاء تسجيل الدخول" else "Microsoft Sign-In cancelled.", Toast.LENGTH_SHORT).show()
-                                                    }
-                                                }
-                                            )
+                                        val clientId = com.example.BuildConfig.GOOGLE_CLIENT_ID
+                                        val isClientIdMissing = clientId.isEmpty() || clientId.contains("YOUR_GOOGLE") || clientId.contains("placeholder")
+                                        if (isClientIdMissing) {
+                                            val missingMsg = if (isArabic) {
+                                                "معرّف عميل Google غير مضبوط في الإعدادات."
+                                            } else {
+                                                "Google Client ID is missing or not configured."
+                                            }
+                                            Toast.makeText(context, missingMsg, Toast.LENGTH_LONG).show()
                                         } else {
-                                            Toast.makeText(context, "Activity is not available.", Toast.LENGTH_SHORT).show()
+                                            if (activity != null) {
+                                                isLoading = true
+                                                val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                                                    .requestEmail()
+                                                    .requestIdToken(clientId)
+                                                    .build()
+                                                val googleSignInClient = GoogleSignIn.getClient(context, gso)
+                                                
+                                                googleSignInClient.signOut().addOnCompleteListener {
+                                                    googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                                                    isLoading = false
+                                                }
+                                            } else {
+                                                Toast.makeText(context, "Activity is not available.", Toast.LENGTH_SHORT).show()
+                                            }
                                         }
                                     },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(54.dp)
-                                        .testTag("microsoft_login_button"),
+                                        .testTag("google_login_button"),
                                     shape = RoundedCornerShape(14.dp),
                                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
                                     colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -371,58 +427,24 @@ fun LoginScreen(
                                         horizontalArrangement = Arrangement.Center,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Window,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.secondary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(20.dp)
+                                                .background(Color.White, shape = CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "G",
+                                                color = Color(0xFF4285F4),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp
+                                            )
+                                        }
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Text(
-                                            text = if (isArabic) "متابعة باستخدام حساب Microsoft" else "Continue with Microsoft Account",
+                                            text = if (isArabic) "متابعة باستخدام حساب Google" else "Continue with Google Account",
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onBackground
-                                        )
-                                    }
-                                }
-
-                                // Passkey Authentication (Original Minimalist Design)
-                                OutlinedButton(
-                                    onClick = {
-                                        if (settings.hapticFeedback) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        scope.launch {
-                                            isLoading = true
-                                            delay(1200) // Simulated passkey setup/reading
-                                            settingsViewModel.updateLoginState(true, "PASSKEY", "secured.key@nabih.ai", "")
-                                            isLoading = false
-                                            Toast.makeText(context, if (isArabic) "تمت المصادقة ببصمة المفتاح المشفر بنجاح" else "Passkey Verified Successfully", Toast.LENGTH_SHORT).show()
-                                            onLoginSuccess()
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(54.dp)
-                                        .testTag("passkey_login_button"),
-                                    shape = RoundedCornerShape(14.dp),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-                                    colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.02f))
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Fingerprint,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = if (isArabic) "تسجيل الدخول باستخدام مفتاح المرور" else "Sign in with Passkey",
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
                                         )
                                     }
                                 }
@@ -450,36 +472,7 @@ fun LoginScreen(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(12.dp))
 
-                                // Guest Mode & Offline Option
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            settingsViewModel.updateLoginState(true, "GUEST", "guest@nabih.ai", "")
-                                            Toast.makeText(context, if (isArabic) "مرحباً بك في وضع الضيف المحلي" else "Welcome to Local Guest Mode", Toast.LENGTH_SHORT).show()
-                                            onLoginSuccess()
-                                        }
-                                        .padding(12.dp)
-                                        .testTag("guest_mode_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ArrowForward,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = if (isArabic) "الدخول كضيف (حفظ محلي)" else "Sign in as Guest (Local Storage)",
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
                             }
                         }
 
@@ -508,9 +501,10 @@ fun LoginScreen(
                                     value = emailInput,
                                     onValueChange = { emailInput = it },
                                     label = { Text(if (isArabic) "البريد الإلكتروني" else "Email Address") },
-                                    leadingIcon = { Icon(Icons.Default.Email, null) },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                    leadingIcon = { Icon(Icons.Default.Email, null, tint = MaterialTheme.colorScheme.primary) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                                     singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().testTag("email_input")
                                 )
 
@@ -518,18 +512,20 @@ fun LoginScreen(
                                     value = passwordInput,
                                     onValueChange = { passwordInput = it },
                                     label = { Text(if (isArabic) "كلمة المرور" else "Password") },
-                                    leadingIcon = { Icon(Icons.Default.Lock, null) },
+                                    leadingIcon = { Icon(Icons.Default.Lock, null, tint = MaterialTheme.colorScheme.primary) },
                                     trailingIcon = {
                                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                             Icon(
                                                 imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                                contentDescription = null
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary
                                             )
                                         }
                                     },
                                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                                     singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().testTag("password_input")
                                 )
 
@@ -537,15 +533,36 @@ fun LoginScreen(
 
                                 Button(
                                     onClick = {
+                                        val emailPattern = android.util.Patterns.EMAIL_ADDRESS
                                         if (emailInput.isBlank() || passwordInput.isBlank()) {
                                             Toast.makeText(context, if (isArabic) "يرجى تعبئة جميع الحقول" else "Please fill all fields", Toast.LENGTH_SHORT).show()
+                                        } else if (!emailPattern.matcher(emailInput.trim()).matches()) {
+                                            Toast.makeText(context, if (isArabic) "يرجى إدخال عنوان بريد إلكتروني صحيح." else "Please enter a valid email address.", Toast.LENGTH_LONG).show()
                                         } else {
                                             scope.launch {
                                                 isLoading = true
-                                                delay(1200)
-                                                settingsViewModel.updateLoginState(true, "EMAIL", emailInput, "")
+                                                delay(1000)
+                                                val user = settingsViewModel.getUserByEmail(emailInput)
                                                 isLoading = false
-                                                onLoginSuccess()
+                                                if (user == null) {
+                                                    val msg = if (isArabic) {
+                                                        "الحساب غير موجود. يرجى إنشاء حساب أولاً."
+                                                    } else {
+                                                        "Account not found. Please create an account first."
+                                                    }
+                                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                                } else if (user.passwordHash != passwordInput) {
+                                                    val msg = if (isArabic) {
+                                                        "البريد الإلكتروني أو كلمة المرور غير صحيحة."
+                                                    } else {
+                                                        "Incorrect email or password."
+                                                    }
+                                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                                } else {
+                                                    settingsViewModel.updateLoginState(true, "EMAIL", user.email, user.name)
+                                                    Toast.makeText(context, if (isArabic) "مرحباً بك ${user.name}" else "Welcome, ${user.name}!", Toast.LENGTH_SHORT).show()
+                                                    onLoginSuccess()
+                                                }
                                             }
                                         }
                                     },
@@ -553,9 +570,13 @@ fun LoginScreen(
                                         .fillMaxWidth()
                                         .height(54.dp)
                                         .testTag("submit_login_button"),
-                                    shape = RoundedCornerShape(14.dp)
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    )
                                 ) {
-                                    Text(if (isArabic) "دخول" else "Login", fontWeight = FontWeight.Bold)
+                                    Text(if (isArabic) "دخول" else "Login", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                                 }
 
                                 Row(
@@ -601,8 +622,10 @@ fun LoginScreen(
                                     value = nameInput,
                                     onValueChange = { nameInput = it },
                                     label = { Text(if (isArabic) "الاسم الكامل" else "Full Name") },
-                                    leadingIcon = { Icon(Icons.Default.Person, null) },
+                                    leadingIcon = { Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.primary) },
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                                     singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().testTag("name_signup_input")
                                 )
 
@@ -610,9 +633,10 @@ fun LoginScreen(
                                     value = emailInput,
                                     onValueChange = { emailInput = it },
                                     label = { Text(if (isArabic) "البريد الإلكتروني" else "Email Address") },
-                                    leadingIcon = { Icon(Icons.Default.Email, null) },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                    leadingIcon = { Icon(Icons.Default.Email, null, tint = MaterialTheme.colorScheme.primary) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                                     singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().testTag("email_signup_input")
                                 )
 
@@ -620,18 +644,20 @@ fun LoginScreen(
                                     value = passwordInput,
                                     onValueChange = { passwordInput = it },
                                     label = { Text(if (isArabic) "كلمة المرور" else "Password") },
-                                    leadingIcon = { Icon(Icons.Default.Lock, null) },
+                                    leadingIcon = { Icon(Icons.Default.Lock, null, tint = MaterialTheme.colorScheme.primary) },
                                     trailingIcon = {
                                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                             Icon(
                                                 imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                                contentDescription = null
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary
                                             )
                                         }
                                     },
                                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                                     singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().testTag("password_signup_input")
                                 )
 
@@ -639,16 +665,31 @@ fun LoginScreen(
 
                                 Button(
                                     onClick = {
+                                        val emailPattern = android.util.Patterns.EMAIL_ADDRESS
                                         if (nameInput.isBlank() || emailInput.isBlank() || passwordInput.isBlank()) {
                                             Toast.makeText(context, if (isArabic) "يرجى ملء كافة التفاصيل" else "Please fill in all details", Toast.LENGTH_SHORT).show()
+                                        } else if (!emailPattern.matcher(emailInput.trim()).matches()) {
+                                            Toast.makeText(context, if (isArabic) "يرجى إدخال عنوان بريد إلكتروني صحيح." else "Please enter a valid email address.", Toast.LENGTH_LONG).show()
                                         } else {
                                             scope.launch {
                                                 isLoading = true
-                                                delay(1500)
-                                                settingsViewModel.updateLoginState(true, "EMAIL", emailInput, nameInput)
-                                                isLoading = false
-                                                Toast.makeText(context, if (isArabic) "تم إنشاء الحساب بنجاح!" else "Account created successfully!", Toast.LENGTH_SHORT).show()
-                                                onLoginSuccess()
+                                                delay(1000)
+                                                val existingUser = settingsViewModel.getUserByEmail(emailInput)
+                                                if (existingUser != null) {
+                                                    isLoading = false
+                                                    val msg = if (isArabic) {
+                                                        "البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول."
+                                                    } else {
+                                                        "Email is already registered. Please sign in."
+                                                    }
+                                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                                } else {
+                                                    settingsViewModel.registerUser(emailInput, nameInput, passwordInput)
+                                                    settingsViewModel.updateLoginState(true, "EMAIL", emailInput, nameInput)
+                                                    isLoading = false
+                                                    Toast.makeText(context, if (isArabic) "تم إنشاء الحساب بنجاح!" else "Account created successfully!", Toast.LENGTH_SHORT).show()
+                                                    onLoginSuccess()
+                                                }
                                             }
                                         }
                                     },
@@ -656,9 +697,13 @@ fun LoginScreen(
                                         .fillMaxWidth()
                                         .height(54.dp)
                                         .testTag("submit_signup_button"),
-                                    shape = RoundedCornerShape(14.dp)
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    )
                                 ) {
-                                    Text(if (isArabic) "إنشاء حساب" else "Sign Up", fontWeight = FontWeight.Bold)
+                                    Text(if (isArabic) "إنشاء حساب" else "Sign Up", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                                 }
 
                                 Row(
@@ -730,9 +775,9 @@ fun LoginScreen(
             }
         }
 
-
     }
 }
+
 
 data class OnboardingSlide(
     val title: String,

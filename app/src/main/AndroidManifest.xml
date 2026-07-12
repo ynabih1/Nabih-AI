@@ -38,21 +38,6 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-
-        <!-- MSAL Activity for Web Redirection -->
-        <activity
-            android:name="com.microsoft.identity.client.BrowserTabActivity"
-            android:exported="true"
-            tools:node="merge">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="msauth"
-                      android:host="com.aistudio.nabihai.xlyjpr"
-                      android:path="/XNfSDvsfSBSOllF0OgztlughAGY=" />
-            </intent-filter>
-        </activity>
     </application>
 
 </manifest>

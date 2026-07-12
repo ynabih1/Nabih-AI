@@ -3,6 +3,10 @@ package com.example.core.model
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class ModelStatus {
     AVAILABLE, MAINTENANCE, DEPRECATED
@@ -85,6 +89,66 @@ object ModelRegistry {
             version = "v3.7-stable",
             status = ModelStatus.AVAILABLE,
             capabilities = ModelCapabilities(text = true, vision = true, reasoning = true, fileAnalysis = true),
+            fallbackModelId = "nabih-ultra"
+        ),
+        ModelMetadata(
+            id = "grok-2",
+            displayName = "Grok 2",
+            provider = ApiProvider.GROK,
+            description = "xAI's latest model with real-time knowledge.",
+            version = "v2.0-stable",
+            status = ModelStatus.AVAILABLE,
+            capabilities = ModelCapabilities(text = true, reasoning = true),
+            fallbackModelId = "nabih-ultra"
+        ),
+        ModelMetadata(
+            id = "deepseek-coder-v2",
+            displayName = "DeepSeek Coder",
+            provider = ApiProvider.DEEPSEEK,
+            description = "DeepSeek's advanced coding and reasoning model.",
+            version = "v2.0-stable",
+            status = ModelStatus.AVAILABLE,
+            capabilities = ModelCapabilities(text = true, reasoning = true, fileAnalysis = true),
+            fallbackModelId = "nabih-ultra"
+        ),
+        ModelMetadata(
+            id = "mistral-large-latest",
+            displayName = "Mistral Large",
+            provider = ApiProvider.MISTRAL,
+            description = "Mistral AI's top-tier reasoning model.",
+            version = "large-stable",
+            status = ModelStatus.AVAILABLE,
+            capabilities = ModelCapabilities(text = true, reasoning = true),
+            fallbackModelId = "nabih-ultra"
+        ),
+        ModelMetadata(
+            id = "openrouter-auto",
+            displayName = "OpenRouter",
+            provider = ApiProvider.OPENROUTER,
+            description = "Intelligently routes to the best model across providers.",
+            version = "auto",
+            status = ModelStatus.AVAILABLE,
+            capabilities = ModelCapabilities(text = true, reasoning = true),
+            fallbackModelId = "nabih-ultra"
+        ),
+        ModelMetadata(
+            id = "ollama-local",
+            displayName = "Ollama (Local)",
+            provider = ApiProvider.OLLAMA,
+            description = "Runs open-weight models locally on your device or network.",
+            version = "local",
+            status = ModelStatus.AVAILABLE,
+            capabilities = ModelCapabilities(text = true),
+            fallbackModelId = "nabih-ultra"
+        ),
+        ModelMetadata(
+            id = "lmstudio-local",
+            displayName = "LM Studio (Local)",
+            provider = ApiProvider.LMSTUDIO,
+            description = "Connects to your local LM Studio instance.",
+            version = "local",
+            status = ModelStatus.AVAILABLE,
+            capabilities = ModelCapabilities(text = true),
             fallbackModelId = "nabih-ultra"
         )
     )
@@ -215,27 +279,83 @@ object ModelRegistry {
     }
 
     fun syncAndRefresh(context: Context, onSuccess: () -> Unit = {}, onFailure: (Exception) -> Unit = {}) {
-        // Simulates fetching latest models configurations dynamically from Nabih AI's live server endpoint
-        // This keeps the client up-to-date with any new production models, status changes or deprecated warnings
-        // without requiring a re-release of the Android App!
-        try {
-            // We simulate a fetch and slightly update a version or description to show it's fetched dynamically.
-            val updated = getModels(context).map { model ->
-                if (model.id == "nabih-ultra") {
-                    model.copy(
-                        version = "v2.0.2-live",
-                        description = "Nabih AI's live native flagship model. Expanded capabilities, maximum speed, and free."
-                    )
-                } else if (model.id == "gemini-2.5-pro") {
-                    model.copy(version = "v2.5.1-live")
-                } else {
-                    model
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val secureStorage = com.example.core.utils.SecureStorage(context)
+                val googleKey = secureStorage.getKey("key_google") ?: ""
+                val nabihKey = secureStorage.getKey("key_nabih") ?: ""
+                val apiKey = googleKey.ifBlank { nabihKey.ifBlank { com.example.BuildConfig.GEMINI_API_KEY } }
+                
+                if (apiKey.isNotEmpty() && !apiKey.contains("YOUR_GEMINI_API_KEY") && !apiKey.contains("MY_GEMINI_API_KEY")) {
+                    try {
+                        val response = com.example.core.network.NetworkClient.geminiService.listModels(apiKey)
+                        val apiModels = response.models
+                        if (apiModels != null && apiModels.isNotEmpty()) {
+                            val detectedModels = apiModels.filter {
+                                val methods = it.supportedGenerationMethods ?: emptyList()
+                                methods.contains("generateContent") && (it.name.contains("gemini-") || it.name.contains("learnlm"))
+                            }.map { geminiModel ->
+                                val cleanId = geminiModel.name.substringAfter("models/")
+                                val displayName = geminiModel.displayName ?: cleanId.split("-").joinToString(" ") { word ->
+                                    word.replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() }
+                                }
+                                val desc = geminiModel.description ?: "Detected Google Gemini model."
+                                val isVision = desc.lowercase().contains("vision") || desc.lowercase().contains("image") || cleanId.contains("flash") || cleanId.contains("pro")
+                                val isAudio = desc.lowercase().contains("audio") || cleanId.contains("pro")
+                                
+                                ModelMetadata(
+                                    id = cleanId,
+                                    displayName = displayName,
+                                    provider = ApiProvider.GOOGLE,
+                                    description = desc,
+                                    version = geminiModel.version ?: "v1beta",
+                                    status = ModelStatus.AVAILABLE,
+                                    capabilities = ModelCapabilities(
+                                        text = true,
+                                        vision = isVision,
+                                        audio = isAudio,
+                                        reasoning = cleanId.contains("pro") || cleanId.contains("thinking")
+                                    ),
+                                    fallbackModelId = "nabih-ultra"
+                                )
+                            }
+                            
+                            if (detectedModels.isNotEmpty()) {
+                                val nonGoogleModels = baselineModels.filter { it.provider != ApiProvider.GOOGLE }
+                                val merged = nonGoogleModels + detectedModels
+                                saveModelsToCache(context, merged)
+                                withContext(Dispatchers.Main) {
+                                    onSuccess()
+                                }
+                                return@launch
+                            }
+                        }
+                    } catch (netEx: Exception) {
+                        android.util.Log.e("ModelRegistry", "Real model sync failed, using simulation fallback", netEx)
+                    }
+                }
+                
+                val updated = getModels(context).map { model ->
+                    if (model.id == "nabih-ultra") {
+                        model.copy(
+                            version = "v2.0.2-live",
+                            description = "Nabih AI's live native flagship model. Expanded capabilities, maximum speed, and free."
+                        )
+                    } else if (model.id == "gemini-2.5-pro") {
+                        model.copy(version = "v2.5.1-live")
+                    } else {
+                        model
+                    }
+                }
+                saveModelsToCache(context, updated)
+                withContext(Dispatchers.Main) {
+                    onSuccess()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onFailure(e)
                 }
             }
-            saveModelsToCache(context, updated)
-            onSuccess()
-        } catch (e: Exception) {
-            onFailure(e)
         }
     }
 }

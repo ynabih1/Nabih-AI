@@ -41,3 +41,11 @@ data class MemoryItem(
     val content: String,
     val createdAt: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "user_accounts")
+data class UserAccount(
+    @PrimaryKey val email: String, // lowercase & trimmed
+    val name: String,
+    val passwordHash: String
+)
+

@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.*
@@ -46,6 +47,9 @@ class ChatRepository(
     private val settingsRepository: SettingsRepository
 ) {
     private val responseCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val activeRequests = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<String>>()
+    private val lastRequestTimes = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val repositoryScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
 
     // --- Room Database Fetchers ---
 
@@ -248,6 +252,80 @@ class ChatRepository(
 
     // --- Real AI Query Engine with Multi-model & Streaming support ---
 
+    private val conversationLocks = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
+
+    private fun findEndQuoteIndex(s: String): Int {
+        var escaped = false
+        for (i in 1 until s.length) {
+            val c = s[i]
+            if (escaped) {
+                escaped = false
+            } else if (c == '\\') {
+                escaped = true
+            } else if (c == '"') {
+                return i
+            }
+        }
+        return -1
+    }
+
+    private fun unescapeJsonString(s: String): String {
+        val sb = java.lang.StringBuilder()
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            if (c == '\\' && i + 1 < s.length) {
+                val next = s[i + 1]
+                when (next) {
+                    'n' -> sb.append('\n')
+                    't' -> sb.append('\t')
+                    'r' -> sb.append('\r')
+                    'b' -> sb.append('\b')
+                    'f' -> sb.append('\u000c')
+                    '\\' -> sb.append('\\')
+                    '"' -> sb.append('"')
+                    '/' -> sb.append('/')
+                    'u' -> {
+                        if (i + 5 < s.length) {
+                            try {
+                                val hex = s.substring(i + 2, i + 6)
+                                val code = hex.toInt(16)
+                                sb.append(code.toChar())
+                                i += 4
+                            } catch (e: Exception) {
+                                sb.append("\\u")
+                            }
+                        } else {
+                            sb.append("\\u")
+                        }
+                    }
+                    else -> sb.append(next)
+                }
+                i += 2
+            } else {
+                sb.append(c)
+                i++
+            }
+        }
+        return sb.toString()
+    }
+
+    private fun extractTextFromLine(line: String): String? {
+        val textMarker = "\"text\":"
+        val index = line.indexOf(textMarker)
+        if (index == -1) return null
+        
+        val afterMarker = line.substring(index + textMarker.length).trim()
+        if (afterMarker.startsWith("\"")) {
+            val endIndex = findEndQuoteIndex(afterMarker)
+            if (endIndex != -1) {
+                val rawValue = afterMarker.substring(1, endIndex)
+                return unescapeJsonString(rawValue)
+            }
+        }
+        return null
+    }
+
     fun streamChatResponse(
         conversationId: String,
         prompt: String,
@@ -271,19 +349,27 @@ class ChatRepository(
             conversationDao.updateConversation(conversation.copy(title = capitalizedTitle, updatedAt = System.currentTimeMillis()))
         }
 
-        // Check cache first
-        val cacheKey = "${model.id}_${searchEnabled}_${prompt}"
-        if (responseCache.containsKey(cacheKey)) {
-            val cachedText = responseCache[cacheKey]!!
-            var currentLength = 0
-            val chunkSize = 4
-            while (currentLength < cachedText.length) {
-                currentLength = (currentLength + chunkSize).coerceAtMost(cachedText.length)
-                emit(cachedText.substring(0, currentLength))
-                kotlinx.coroutines.delay(10)
+        // Cache key specific to model, search configuration, conversation, and prompt
+        val cacheKey = "${model.id}_${searchEnabled}_${conversationId}_${prompt.trim()}"
+
+        // Intelligent Request Queueing: Serialize concurrent requests per conversation using Mutex
+        val conversationLock = conversationLocks.getOrPut(conversationId) { kotlinx.coroutines.sync.Mutex() }
+        val isArabic = settings.language == com.example.core.model.AppLanguage.ARABIC
+
+        conversationLock.lock()
+        try {
+            // Check cache after obtaining lock to prevent duplicate execution of concurrent requests
+            if (responseCache.containsKey(cacheKey)) {
+                val cachedText = responseCache[cacheKey]!!
+                var currentLength = 0
+                val chunkSize = 4
+                while (currentLength < cachedText.length) {
+                    currentLength = (currentLength + chunkSize).coerceAtMost(cachedText.length)
+                    emit(cachedText.substring(0, currentLength))
+                    kotlinx.coroutines.delay(10)
+                }
+                return@flow
             }
-            return@flow
-        }
 
         // Load conversation history for context
         val history = messageDao.getMessagesForConversationSync(conversationId)
@@ -335,40 +421,84 @@ class ChatRepository(
         val migratedModelId = com.example.core.model.ModelRegistry.checkAndMigrateDeprecated(context, model.id)
         val registryModel = com.example.core.model.ModelRegistry.getModelById(context, migratedModelId)
 
-        var actualModelId = registryModel.id
-        var finalApiKey = ""
+        val isGeminiRequest = registryModel.provider == ApiProvider.GOOGLE || registryModel.provider == ApiProvider.NABIH
 
-        when (registryModel.provider) {
-            ApiProvider.NABIH -> {
-                finalApiKey = settings.nabihApiKey.ifBlank { com.example.BuildConfig.GEMINI_API_KEY }
-                // Nabih Ultra maps to Gemini Pro under the hood as the local stable backup
-                actualModelId = "gemini-2.5-pro"
+        // Build a candidate models list for Google/Nabih requests to support automatic model fallback
+        val modelsToTry = mutableListOf<String>()
+        if (isGeminiRequest) {
+            val requestedId = if (registryModel.id == "nabih-ultra") "gemini-2.5-pro" else registryModel.id
+            modelsToTry.add(requestedId)
+            
+            // Prioritize candidate fallback models that are supported and not equal to requested
+            val candidates = listOf("gemini-2.5-pro", "gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro")
+            candidates.forEach { cand ->
+                if (cand != requestedId && !modelsToTry.contains(cand)) {
+                    modelsToTry.add(cand)
+                }
             }
-            ApiProvider.GOOGLE -> {
-                finalApiKey = settings.googleApiKey
-                if (finalApiKey.isEmpty()) throw Exception("API Key Required: Google Gemini API Key is missing. Please add it in API Keys settings.")
-            }
-            ApiProvider.OPENAI -> {
-                finalApiKey = settings.openaiApiKey
-                if (finalApiKey.isEmpty()) throw Exception("API Key Required: OpenAI API Key is missing. Please add it in API Keys settings.")
-            }
-            ApiProvider.ANTHROPIC -> {
-                finalApiKey = settings.anthropicApiKey
-                if (finalApiKey.isEmpty()) throw Exception("API Key Required: Anthropic API Key is missing. Please add it in API Keys settings.")
-            }
+        } else {
+            modelsToTry.add(registryModel.id)
         }
 
         // Retry mechanism
-        val maxRetries = 3
-        var currentTry = 0
-        var success = false
         var responseText = ""
+        var success = false
         var lastException: Exception? = null
 
-        while (currentTry < maxRetries && !success) {
-            try {
-                when (registryModel.provider) {
-                    ApiProvider.GOOGLE, ApiProvider.NABIH -> {
+        // Iterate through the model candidate queue (providing seamless fallback)
+        for (modelIndex in modelsToTry.indices) {
+            val currentModelId = modelsToTry[modelIndex]
+
+            if (modelIndex > 0) {
+                val fallbackWarning = if (isArabic) {
+                    "\n[تم تحويل النموذج تلقائياً إلى $currentModelId لضمان استمرار المحادثة...]\n\n"
+                } else {
+                    "\n[Model Fallback: Switched to $currentModelId to maintain continuous conversation...]\n\n"
+                }
+                emit(fallbackWarning)
+            }
+
+            val maxRetries = 3
+            var currentTry = 0
+            var modelSuccess = false
+
+            while (currentTry < maxRetries && !modelSuccess) {
+                try {
+                    // Resolve appropriate API key
+                    val currentApiKey = if (isGeminiRequest) {
+                        if (registryModel.provider == ApiProvider.NABIH) {
+                            settings.nabihApiKey.ifBlank { settings.googleApiKey.ifBlank { com.example.BuildConfig.GEMINI_API_KEY } }
+                        } else {
+                            settings.googleApiKey.ifBlank { settings.nabihApiKey.ifBlank { com.example.BuildConfig.GEMINI_API_KEY } }
+                        }
+                    } else {
+                        when (registryModel.provider) {
+                            ApiProvider.OPENAI -> settings.openaiApiKey
+                            ApiProvider.ANTHROPIC -> settings.anthropicApiKey
+                            ApiProvider.GROK -> settings.grokApiKey
+                            ApiProvider.DEEPSEEK -> settings.deepseekApiKey
+                            ApiProvider.MISTRAL -> settings.mistralApiKey
+                            ApiProvider.OPENROUTER -> settings.openRouterApiKey
+                            ApiProvider.OLLAMA -> settings.ollamaEndpoint
+                            ApiProvider.LMSTUDIO -> settings.lmStudioEndpoint
+                            else -> ""
+                        }
+                    }
+
+                    if (currentApiKey.isEmpty() && !isGeminiRequest) {
+                        throw Exception("API Key Required: ${registryModel.provider.displayName} API Key is missing. Please add it in Settings.")
+                    }
+
+                    // Apply intelligent request throttling
+                    val now = System.currentTimeMillis()
+                    val lastTime = lastRequestTimes[currentModelId] ?: 0L
+                    val diff = now - lastTime
+                    if (diff < 1500) {
+                        kotlinx.coroutines.delay(1500 - diff)
+                    }
+                    lastRequestTimes[currentModelId] = System.currentTimeMillis()
+
+                    if (isGeminiRequest) {
                         val geminiContents = mutableListOf<GeminiContent>()
                         history.forEach { msg ->
                             val parts = mutableListOf<GeminiPart>()
@@ -381,7 +511,6 @@ class ChatRepository(
                             activeParts.add(GeminiPart(inlineData = GeminiInlineData(mimeType, attachedBase64Image)))
                         }
                         
-                        // Check if we have an attached PDF to send to Gemini as inlineData
                         if (attachedDocUri != null) {
                             val fileName = getFileName(attachedDocUri) ?: ""
                             val ext = fileName.substringAfterLast('.', "").lowercase()
@@ -401,98 +530,146 @@ class ChatRepository(
                             systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = systemPrompt))),
                             generationConfig = GeminiGenerationConfig(temperature = 0.7f)
                         )
-                        val response = NetworkClient.geminiService.generateContent(actualModelId, finalApiKey, req)
-                        responseText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-                            ?: "No text response generated by Google Gemini."
-                    }
-                    ApiProvider.OPENAI -> {
-                        val messages = mutableListOf<OpenAiMessage>()
-                        messages.add(OpenAiMessage("system", systemPrompt))
-                        history.forEach { msg ->
-                            messages.add(OpenAiMessage(if (msg.role == "user") "user" else "assistant", msg.content))
-                        }
-                        messages.add(OpenAiMessage("user", activePrompt))
-                        val req = OpenAiRequest(
-                            model = actualModelId,
-                            messages = messages,
-                            temperature = 0.7f
-                        )
-                        val authHeader = "Bearer $finalApiKey"
-                        val service = NetworkClient.openAiService
-                        val response = service.generateCompletion(authHeader, req)
-                        responseText = response.choices?.firstOrNull()?.message?.content ?: "No text response generated."
-                    }
-                    ApiProvider.ANTHROPIC -> {
-                        val messages = mutableListOf<ClaudeMessage>()
-                        history.forEach { msg ->
-                            messages.add(ClaudeMessage(if (msg.role == "user") "user" else "assistant", msg.content))
-                        }
-                        messages.add(ClaudeMessage("user", activePrompt))
-                        val req = ClaudeRequest(
-                            model = actualModelId,
-                            messages = messages,
-                            system = systemPrompt,
-                            temperature = 0.7f
-                        )
-                        val response = NetworkClient.claudeService.generateMessage(apiKey = finalApiKey, request = req)
-                        responseText = response.content?.firstOrNull()?.text ?: "No text response generated."
-                    }
-                }
-                success = true
-            } catch (e: Exception) {
-                lastException = e
 
-                android.util.Log.e("ChatRepository", "API Request failed on try $currentTry for model $actualModelId", e)
-                currentTry++
-                if (currentTry < maxRetries) {
-                    kotlinx.coroutines.delay(1000L * currentTry) // Exponential backoff
+                        // Try real-time streaming first
+                        var streamSuccess = false
+                        val streamedText = java.lang.StringBuilder()
+                        try {
+                            val responseBody = NetworkClient.geminiService.generateContentStream(currentModelId, currentApiKey, req)
+                            val reader = responseBody.charStream().buffered()
+                            var line = reader.readLine()
+                            while (line != null) {
+                                val extracted = extractTextFromLine(line)
+                                if (extracted != null) {
+                                    streamedText.append(extracted)
+                                    emit(streamedText.toString())
+                                    streamSuccess = true
+                                }
+                                line = reader.readLine()
+                            }
+                        } catch (streamEx: Exception) {
+                            android.util.Log.w("ChatRepository", "Streaming failed for model $currentModelId: ${streamEx.localizedMessage}", streamEx)
+                        }
+
+                        if (streamSuccess && streamedText.isNotEmpty()) {
+                            responseText = streamedText.toString()
+                            modelSuccess = true
+                        } else {
+                            // Fallback to standard non-streaming
+                            val response = NetworkClient.geminiService.generateContent(currentModelId, currentApiKey, req)
+                            val textResult = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                                ?: throw Exception("No text response generated by Google Gemini.")
+                            responseText = textResult
+                            modelSuccess = true
+                            
+                            // Smooth emission of the full text to the flow
+                            var currentLength = 0
+                            val chunkSize = 4
+                            while (currentLength < responseText.length) {
+                                currentLength = (currentLength + chunkSize).coerceAtMost(responseText.length)
+                                emit(responseText.substring(0, currentLength))
+                                kotlinx.coroutines.delay(12)
+                            }
+                        }
+                    } else {
+                        val textResult = when (registryModel.provider) {
+                            ApiProvider.OPENAI -> {
+                                val messages = mutableListOf<OpenAiMessage>()
+                                messages.add(OpenAiMessage("system", systemPrompt))
+                                history.forEach { msg ->
+                                    messages.add(OpenAiMessage(if (msg.role == "user") "user" else "assistant", msg.content))
+                                }
+                                messages.add(OpenAiMessage("user", activePrompt))
+                                val req = OpenAiRequest(
+                                    model = currentModelId,
+                                    messages = messages,
+                                    temperature = 0.7f
+                                )
+                                val authHeader = "Bearer $currentApiKey"
+                                val response = NetworkClient.openAiService.generateCompletion(authHeader, req)
+                                response.choices?.firstOrNull()?.message?.content ?: throw Exception("No text response generated.")
+                            }
+                            ApiProvider.ANTHROPIC -> {
+                                val messages = mutableListOf<ClaudeMessage>()
+                                history.forEach { msg ->
+                                    messages.add(ClaudeMessage(if (msg.role == "user") "user" else "assistant", msg.content))
+                                }
+                                messages.add(ClaudeMessage("user", activePrompt))
+                                val req = ClaudeRequest(
+                                    model = currentModelId,
+                                    messages = messages,
+                                    system = systemPrompt,
+                                    temperature = 0.7f
+                                )
+                                val response = NetworkClient.claudeService.generateMessage(apiKey = currentApiKey, request = req)
+                                response.content?.firstOrNull()?.text ?: throw Exception("No text response generated.")
+                            }
+                            ApiProvider.GROK,
+                            ApiProvider.DEEPSEEK,
+                            ApiProvider.MISTRAL,
+                            ApiProvider.OPENROUTER,
+                            ApiProvider.OLLAMA,
+                            ApiProvider.LMSTUDIO -> {
+                                throw Exception("${registryModel.provider.displayName} integration is coming in the next update! API Key is saved securely.")
+                            }
+                            else -> throw Exception("Unsupported AI Provider.")
+                        }
+                        
+                        responseText = textResult
+                        modelSuccess = true
+                        
+                        // Smooth emission
+                        var currentLength = 0
+                        val chunkSize = 4
+                        while (currentLength < responseText.length) {
+                            currentLength = (currentLength + chunkSize).coerceAtMost(responseText.length)
+                            emit(responseText.substring(0, currentLength))
+                            kotlinx.coroutines.delay(12)
+                        }
+                    }
+
+                    success = true
+                } catch (e: Exception) {
+                    lastException = e
+                    android.util.Log.e("ChatRepository", "API Request failed on try $currentTry for model $currentModelId", e)
+                    
+                    // Check for invalid key/unauthorized to immediately skip to next model/fail
+                    val isAuthError = e is retrofit2.HttpException && (e.code() == 401 || e.code() == 403)
+                    if (isAuthError) {
+                        break
+                    }
+
+                    currentTry++
+                    if (currentTry < maxRetries) {
+                        val isRateLimit = e.message?.contains("429") == true ||
+                                (e is retrofit2.HttpException && e.code() == 429)
+                        val backoffDelay = if (isRateLimit) {
+                            2000L * currentTry * currentTry
+                        } else {
+                            1000L * currentTry
+                        }
+                        kotlinx.coroutines.delay(backoffDelay)
+                    }
                 }
+            }
+
+            if (modelSuccess) {
+                break
             }
         }
 
         if (!success) {
-            if (registryModel.id != "nabih-ultra") {
-                val fallbackModelId = registryModel.fallbackModelId
-                emit("[Model Fallback: Selected model is currently unavailable or returned an error. Switched to ${fallbackModelId} to maintain continuous conversation...]\n\n")
-                try {
-                    val fallbackModel = com.example.core.model.ModelRegistry.getModelById(context, fallbackModelId)
-                    val geminiContents = mutableListOf<GeminiContent>()
-                    history.forEach { msg ->
-                        geminiContents.add(GeminiContent(role = if (msg.role == "user") "user" else "model", parts = listOf(GeminiPart(text = msg.content))))
-                    }
-                    geminiContents.add(GeminiContent(role = "user", parts = listOf(GeminiPart(text = activePrompt))))
-                    val req = GeminiRequest(
-                        contents = geminiContents,
-                        systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = systemPrompt))),
-                        generationConfig = GeminiGenerationConfig(temperature = 0.7f)
-                    )
-                    val fallbackApiKey = settings.nabihApiKey.ifBlank { settings.googleApiKey.ifBlank { com.example.BuildConfig.GEMINI_API_KEY } }
-                    val response = NetworkClient.geminiService.generateContent("gemini-2.5-flash", fallbackApiKey, req)
-                    responseText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-                        ?: "No text response generated by Google Gemini fallback."
-                } catch (fallbackEx: Exception) {
-                    throw Exception("Fallback to ${fallbackModelId} failed: ${fallbackEx.localizedMessage}")
-                }
-            } else {
-                val errorMsg = lastException?.localizedMessage ?: "Failed to connect to AI provider after $maxRetries attempts."
-                val fullError = if (model.provider == ApiProvider.NABIH) "Nabih Ultra Service Error: $errorMsg" else errorMsg
-                throw Exception(fullError)
-            }
+            val errorMsg = lastException?.localizedMessage ?: "Failed to connect to AI provider after candidate fallback."
+            throw Exception(errorMsg)
         }
 
-        // Cache response
+        // Cache response on success
         responseCache[cacheKey] = responseText
-
-        // Emit response smoothly chunk-by-chunk to emulate realistic fast stream
-        var currentLength = 0
-        val chunkSize = 4
-        while (currentLength < responseText.length) {
-            currentLength = (currentLength + chunkSize).coerceAtMost(responseText.length)
-            emit(responseText.substring(0, currentLength))
-            kotlinx.coroutines.delay(12)
+        } finally {
+            conversationLock.unlock()
         }
 
-    }.flowOn(Dispatchers.IO)
+}.flowOn(Dispatchers.IO)
 
     suspend fun duplicateConversation(originalId: String): String = withContext(Dispatchers.IO) {
         val original = conversationDao.getConversationById(originalId) ?: return@withContext ""

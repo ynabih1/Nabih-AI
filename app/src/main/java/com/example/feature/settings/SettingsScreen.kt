@@ -119,12 +119,19 @@ fun SettingsSectionCard(
 
 @Composable
 fun ApiKeysSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic: Boolean) {
+    val context = LocalContext.current
     SettingsSectionCard(if (isArabic) "مفاتيح API الخاصة بك" else "AI API Keys", Icons.Outlined.Key) {
         var showKeys by remember { mutableStateOf(false) }
         var nabihKey by remember { mutableStateOf(settings.nabihApiKey) }
         var googleKey by remember { mutableStateOf(settings.googleApiKey) }
         var openaiKey by remember { mutableStateOf(settings.openaiApiKey) }
         var anthropicKey by remember { mutableStateOf(settings.anthropicApiKey) }
+        var grokKey by remember { mutableStateOf(settings.grokApiKey) }
+        var deepseekKey by remember { mutableStateOf(settings.deepseekApiKey) }
+        var mistralKey by remember { mutableStateOf(settings.mistralApiKey) }
+        var openRouterKey by remember { mutableStateOf(settings.openRouterApiKey) }
+        var ollamaKey by remember { mutableStateOf(settings.ollamaEndpoint) }
+        var lmStudioKey by remember { mutableStateOf(settings.lmStudioEndpoint) }
         
         var isValidating by remember { mutableStateOf(false) }
         var validationMessage by remember { mutableStateOf("") }
@@ -163,6 +170,12 @@ fun ApiKeysSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic
                     OutlinedTextField(value = googleKey, onValueChange = { googleKey = it }, label = { Text("Google Gemini") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(value = openaiKey, onValueChange = { openaiKey = it }, label = { Text("OpenAI") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(value = anthropicKey, onValueChange = { anthropicKey = it }, label = { Text("Anthropic Claude") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = grokKey, onValueChange = { grokKey = it }, label = { Text("xAI Grok") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = deepseekKey, onValueChange = { deepseekKey = it }, label = { Text("DeepSeek") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = mistralKey, onValueChange = { mistralKey = it }, label = { Text("Mistral AI") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = openRouterKey, onValueChange = { openRouterKey = it }, label = { Text("OpenRouter") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = ollamaKey, onValueChange = { ollamaKey = it }, label = { Text("Ollama Endpoint") }, placeholder = { Text("http://localhost:11434") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = lmStudioKey, onValueChange = { lmStudioKey = it }, label = { Text("LM Studio Endpoint") }, placeholder = { Text("http://localhost:1234/v1") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     
                     if (validationMessage.isNotEmpty()) {
                         Text(text = validationMessage, style = MaterialTheme.typography.bodySmall, color = if (validationMessage.contains("Error") || validationMessage.contains("خطأ") || validationMessage.contains("غير صالح") || validationMessage.contains("Invalid") || validationMessage.contains("فشل") || validationMessage.contains("failed") || validationMessage.contains("HTTP")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
@@ -178,11 +191,12 @@ fun ApiKeysSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic
                                 validationMessage = if (isArabic) "جاري التحقق من المفاتيح..." else "Validating API keys..."
                                 coroutineScope.launch {
                                     val result = viewModel.validateAndSaveApiKeys(
-                                        nabihKey, googleKey, openaiKey, anthropicKey, isArabic
+                                        nabihKey, googleKey, openaiKey, anthropicKey, grokKey, deepseekKey, mistralKey, openRouterKey, ollamaKey, lmStudioKey, isArabic
                                     )
                                     isValidating = false
                                     validationMessage = result.second
                                     if (result.first) {
+                                        com.example.core.model.ModelRegistry.syncAndRefresh(context)
                                         kotlinx.coroutines.delay(2000)
                                         validationMessage = ""
                                         showKeys = false
@@ -205,7 +219,13 @@ fun ApiKeysSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic
                                 googleKey = ""
                                 openaiKey = ""
                                 anthropicKey = ""
-                                viewModel.saveApiKeys("", "", "", "")
+                                grokKey = ""
+                                deepseekKey = ""
+                                mistralKey = ""
+                                openRouterKey = ""
+                                ollamaKey = ""
+                                lmStudioKey = ""
+                                viewModel.saveApiKeys("", "", "", "", "", "", "", "", "", "")
                                 validationMessage = if (isArabic) "تم مسح المفاتيح" else "Keys removed"
                                 coroutineScope.launch {
                                     kotlinx.coroutines.delay(2000)

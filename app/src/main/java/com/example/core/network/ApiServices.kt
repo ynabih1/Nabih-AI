@@ -56,6 +56,18 @@ data class GeminiCandidate(
     val content: GeminiContent?
 )
 
+data class GeminiModel(
+    val name: String,
+    val version: String? = null,
+    val displayName: String? = null,
+    val description: String? = null,
+    val supportedGenerationMethods: List<String>? = null
+)
+
+data class GeminiListModelsResponse(
+    val models: List<GeminiModel>? = null
+)
+
 // --- OpenAI Models ---
 
 data class OpenAiMessage(
@@ -145,6 +157,11 @@ interface GeminiApiService {
         @Header("x-goog-api-key") apiKey: String,
         @Body request: GeminiRequest
     ): ResponseBody
+
+    @GET("v1beta/models")
+    suspend fun listModels(
+        @Header("x-goog-api-key") apiKey: String
+    ): GeminiListModelsResponse
 }
 
 interface OpenAiApiService {

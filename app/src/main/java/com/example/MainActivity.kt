@@ -5,7 +5,7 @@ import com.example.core.model.AppLanguage
 import com.example.core.model.AppTheme
 import com.example.core.theme.NabihTheme
 import com.example.feature.auth.AccountScreen
-import com.example.feature.auth.AuthManager
+
 import com.example.feature.auth.LoginScreen
 import com.example.feature.chat.ChatViewModel
 import com.example.feature.chat.HomeViewModel
@@ -44,6 +44,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+
+
         // Get dependencies container
         val appContainer = (application as NabihApplication).container
         
@@ -140,23 +143,19 @@ class MainActivity : ComponentActivity() {
                                     onNavigateBack = { navController.popBackStack() },
                                     isArabic = settings.language == AppLanguage.ARABIC,
                                     onLogout = {
-                                        AuthManager.signOutMicrosoft {
-                                            settingsViewModel.logout()
-                                            navController.navigate("login") {
-                                                popUpTo("home") { inclusive = true }
-                                            }
+                                        settingsViewModel.logout()
+                                        navController.navigate("login") {
+                                            popUpTo("home") { inclusive = true }
                                         }
                                     },
                                     onDeleteAccount = {
                                         settingsViewModel.viewModelScope.launch {
                                             appContainer.chatRepository.deleteAllConversations()
                                             appContainer.memoryRepository.deleteAllMemories()
-                                            AuthManager.signOutMicrosoft {
-                                                settingsViewModel.logout()
-                                                settingsViewModel.saveApiKeys("", "", "", "")
-                                                navController.navigate("login") {
-                                                    popUpTo("home") { inclusive = true }
-                                                }
+                                            settingsViewModel.logout()
+                                            settingsViewModel.saveApiKeys("", "", "", "")
+                                            navController.navigate("login") {
+                                                popUpTo("home") { inclusive = true }
                                             }
                                         }
                                     }
