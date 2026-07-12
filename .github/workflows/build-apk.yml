@@ -25,6 +25,13 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Prepare missing files
+        run: |
+          # Create a dummy .env file
+          if [ -f .env.example ]; then cp .env.example .env; else touch .env; fi
+          # Create a dummy google-services.json to prevent plugin errors
+          echo '{"project_info":{"project_number":"123","project_id":"dummy","storage_bucket":"dummy"},"client":[{"client_info":{"mobilesdk_app_id":"1:123:android:123","android_client_info":{"package_name":"com.aistudio.nabihai.xlyjpr"}},"oauth_client":[],"api_key":[{"current_key":"dummy"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}]}' > app/google-services.json
+
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace
 
