@@ -300,6 +300,7 @@ class SettingsViewModel(
         if (trimmedOpenai.isNotEmpty() && trimmedOpenai != settings.value.openaiApiKey) {
             val res = validateKeyGeneric("OpenAI", trimmedOpenai, isArabic) {
                 com.example.core.network.NetworkClient.openAiService.generateCompletion(
+                    url = "https://api.openai.com/v1/chat/completions",
                     authorization = "Bearer $trimmedOpenai",
                     request = com.example.core.network.OpenAiRequest(
                         model = "gpt-4o-mini",

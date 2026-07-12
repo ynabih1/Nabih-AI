@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/ynabihx/nabih-ai/main/nabih_ai_white_bg.png" alt="Nabih AI Logo" width="180" height="180" />
-</p>
-
 # Nabih AI
 
 Nabih AI is a professional, high-performance Android AI assistant built using Kotlin, Jetpack Compose, and modern Android architecture. Designed with a clean Material 3 user interface, the application offers a cohesive, highly responsive experience with native support for both English and Arabic languages.

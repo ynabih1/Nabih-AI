@@ -449,15 +449,6 @@ class ChatRepository(
         for (modelIndex in modelsToTry.indices) {
             val currentModelId = modelsToTry[modelIndex]
 
-            if (modelIndex > 0) {
-                val fallbackWarning = if (isArabic) {
-                    "\n[تم تحويل النموذج تلقائياً إلى $currentModelId لضمان استمرار المحادثة...]\n\n"
-                } else {
-                    "\n[Model Fallback: Switched to $currentModelId to maintain continuous conversation...]\n\n"
-                }
-                emit(fallbackWarning)
-            }
-
             val maxRetries = 3
             var currentTry = 0
             var modelSuccess = false
@@ -573,7 +564,13 @@ class ChatRepository(
                         }
                     } else {
                         val textResult = when (registryModel.provider) {
-                            ApiProvider.OPENAI -> {
+                            ApiProvider.OPENAI,
+                            ApiProvider.GROK,
+                            ApiProvider.DEEPSEEK,
+                            ApiProvider.MISTRAL,
+                            ApiProvider.OPENROUTER,
+                            ApiProvider.OLLAMA,
+                            ApiProvider.LMSTUDIO -> {
                                 val messages = mutableListOf<OpenAiMessage>()
                                 messages.add(OpenAiMessage("system", systemPrompt))
                                 history.forEach { msg ->
@@ -585,8 +582,27 @@ class ChatRepository(
                                     messages = messages,
                                     temperature = 0.7f
                                 )
-                                val authHeader = "Bearer $currentApiKey"
-                                val response = NetworkClient.openAiService.generateCompletion(authHeader, req)
+                                val (endpointUrl, authHeader) = when (registryModel.provider) {
+                                    ApiProvider.OPENAI -> "https://api.openai.com/v1/chat/completions" to "Bearer $currentApiKey"
+                                    ApiProvider.GROK -> "https://api.x.ai/v1/chat/completions" to "Bearer $currentApiKey"
+                                    ApiProvider.DEEPSEEK -> "https://api.deepseek.com/chat/completions" to "Bearer $currentApiKey"
+                                    ApiProvider.MISTRAL -> "https://api.mistral.ai/v1/chat/completions" to "Bearer $currentApiKey"
+                                    ApiProvider.OPENROUTER -> "https://openrouter.ai/api/v1/chat/completions" to "Bearer $currentApiKey"
+                                    ApiProvider.OLLAMA -> {
+                                        var base = currentApiKey.trimEnd('/')
+                                        base = base.replace("localhost", "10.0.2.2").replace("127.0.0.1", "10.0.2.2")
+                                        val url = if (base.endsWith("/v1")) "$base/chat/completions" else "$base/v1/chat/completions"
+                                        url to "Bearer ollama"
+                                    }
+                                    ApiProvider.LMSTUDIO -> {
+                                        var base = currentApiKey.trimEnd('/')
+                                        base = base.replace("localhost", "10.0.2.2").replace("127.0.0.1", "10.0.2.2")
+                                        val url = if (base.endsWith("/v1")) "$base/chat/completions" else "$base/v1/chat/completions"
+                                        url to "Bearer lmstudio"
+                                    }
+                                    else -> "https://api.openai.com/v1/chat/completions" to "Bearer $currentApiKey"
+                                }
+                                val response = NetworkClient.openAiService.generateCompletion(endpointUrl, authHeader, req)
                                 response.choices?.firstOrNull()?.message?.content ?: throw Exception("No text response generated.")
                             }
                             ApiProvider.ANTHROPIC -> {
@@ -603,14 +619,6 @@ class ChatRepository(
                                 )
                                 val response = NetworkClient.claudeService.generateMessage(apiKey = currentApiKey, request = req)
                                 response.content?.firstOrNull()?.text ?: throw Exception("No text response generated.")
-                            }
-                            ApiProvider.GROK,
-                            ApiProvider.DEEPSEEK,
-                            ApiProvider.MISTRAL,
-                            ApiProvider.OPENROUTER,
-                            ApiProvider.OLLAMA,
-                            ApiProvider.LMSTUDIO -> {
-                                throw Exception("${registryModel.provider.displayName} integration is coming in the next update! API Key is saved securely.")
                             }
                             else -> throw Exception("Unsupported AI Provider.")
                         }
@@ -631,7 +639,7 @@ class ChatRepository(
                     success = true
                 } catch (e: Exception) {
                     lastException = e
-                    android.util.Log.e("ChatRepository", "API Request failed on try $currentTry for model $currentModelId", e)
+                    android.util.Log.e("ChatRepository", "API Request failed on try $currentTry for model $currentModelId. Details: ${e.stackTraceToString()}", e)
                     
                     // Check for invalid key/unauthorized to immediately skip to next model/fail
                     val isAuthError = e is retrofit2.HttpException && (e.code() == 401 || e.code() == 403)

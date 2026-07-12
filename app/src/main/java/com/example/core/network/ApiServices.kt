@@ -165,15 +165,17 @@ interface GeminiApiService {
 }
 
 interface OpenAiApiService {
-    @POST("v1/chat/completions")
+    @POST
     suspend fun generateCompletion(
+        @Url url: String,
         @Header("Authorization") authorization: String,
         @Body request: OpenAiRequest
     ): OpenAiResponse
 
-    @POST("v1/chat/completions")
+    @POST
     @Streaming
     suspend fun generateCompletionStream(
+        @Url url: String,
         @Header("Authorization") authorization: String,
         @Body request: OpenAiRequest
     ): ResponseBody

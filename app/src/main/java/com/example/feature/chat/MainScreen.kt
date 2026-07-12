@@ -51,8 +51,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
@@ -76,7 +79,7 @@ fun generateAutoTitle(text: String): String {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MainScreen(
     homeViewModel: com.example.feature.chat.HomeViewModel,
@@ -163,6 +166,7 @@ fun MainScreen(
         }
     ) {
         Scaffold(
+            contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
                 TopAppBar(
                     title = {
@@ -365,6 +369,7 @@ fun MainScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
+                    
             ) {
                 if (searchEnabled) {
                     Surface(
@@ -455,7 +460,8 @@ fun MainScreen(
                             } else {
                                 state.messages.filter { it.content.contains(searchQuery, ignoreCase = true) }
                             }
-                            LaunchedEffect(filteredMessages.size, streamResponse) {
+                            val imeVisible = WindowInsets.isImeVisible
+                            LaunchedEffect(filteredMessages.size, streamResponse, imeVisible, inputText) {
                                 if (filteredMessages.isNotEmpty()) {
                                     listState.animateScrollToItem(filteredMessages.lastIndex + (if (isGenerating) 1 else 0))
                                 }

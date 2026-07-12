@@ -1,3 +1,5 @@
+import java.util.Properties
+import java.io.FileInputStream
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 
 plugins {
@@ -21,6 +23,23 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    var geminiKey = System.getenv("GEMINI_API_KEY")
+    var googleClientId = System.getenv("GOOGLE_CLIENT_ID")
+    if (geminiKey.isNullOrEmpty() || googleClientId.isNullOrEmpty()) {
+        val envFile = rootProject.file(".env")
+        val envExampleFile = rootProject.file(".env.example")
+        val props = Properties()
+        if (envFile.exists()) {
+            props.load(FileInputStream(envFile))
+        } else if (envExampleFile.exists()) {
+            props.load(FileInputStream(envExampleFile))
+        }
+        if (geminiKey.isNullOrEmpty()) geminiKey = props.getProperty("GEMINI_API_KEY") ?: ""
+        if (googleClientId.isNullOrEmpty()) googleClientId = props.getProperty("GOOGLE_CLIENT_ID") ?: ""
+    }
+    buildConfigField("String", "GEMINI_API_KEY", "\"${geminiKey}\"")
+    buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${googleClientId}\"")
   }
 
   signingConfigs {
@@ -47,6 +66,7 @@ android {
       signingConfig = signingConfigs.getByName("release")
     }
     debug {
+      signingConfig = signingConfigs.getByName("debugConfig")
     }
   }
   compileOptions {
@@ -65,6 +85,8 @@ android {
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
+  ignoreList.add("GEMINI_API_KEY")
+  ignoreList.add("GOOGLE_CLIENT_ID")
 }
 
 googleServices {
