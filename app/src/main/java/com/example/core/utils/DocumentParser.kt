@@ -179,30 +179,30 @@ object DocumentParser {
             
             var idx = 0
             while (idx < bytes.size - 6) {
-                if (bytes[idx] == 's'.toByte() &&
-                    bytes[idx+1] == 't'.toByte() &&
-                    bytes[idx+2] == 'r'.toByte() &&
-                    bytes[idx+3] == 'e'.toByte() &&
-                    bytes[idx+4] == 'a'.toByte() &&
-                    bytes[idx+5] == 'm'.toByte()) {
+                if (bytes[idx] == 's'.code.toByte() &&
+                    bytes[idx+1] == 't'.code.toByte() &&
+                    bytes[idx+2] == 'r'.code.toByte() &&
+                    bytes[idx+3] == 'e'.code.toByte() &&
+                    bytes[idx+4] == 'a'.code.toByte() &&
+                    bytes[idx+5] == 'm'.code.toByte()) {
                     
                     idx += 6
-                    while (idx < bytes.size && (bytes[idx] == '\r'.toByte() || bytes[idx] == '\n'.toByte())) {
+                    while (idx < bytes.size && (bytes[idx] == '\r'.code.toByte() || bytes[idx] == '\n'.code.toByte())) {
                         idx++
                     }
                     
                     val streamStart = idx
                     var streamEnd = -1
                     while (idx < bytes.size - 9) {
-                        if (bytes[idx] == 'e'.toByte() &&
-                            bytes[idx+1] == 'n'.toByte() &&
-                            bytes[idx+2] == 'd'.toByte() &&
-                            bytes[idx+3] == 's'.toByte() &&
-                            bytes[idx+4] == 't'.toByte() &&
-                            bytes[idx+5] == 'r'.toByte() &&
-                            bytes[idx+6] == 'e'.toByte() &&
-                            bytes[idx+7] == 'a'.toByte() &&
-                            bytes[idx+8] == 'm'.toByte()) {
+                        if (bytes[idx] == 'e'.code.toByte() &&
+                            bytes[idx+1] == 'n'.code.toByte() &&
+                            bytes[idx+2] == 'd'.code.toByte() &&
+                            bytes[idx+3] == 's'.code.toByte() &&
+                            bytes[idx+4] == 't'.code.toByte() &&
+                            bytes[idx+5] == 'r'.code.toByte() &&
+                            bytes[idx+6] == 'e'.code.toByte() &&
+                            bytes[idx+7] == 'a'.code.toByte() &&
+                            bytes[idx+8] == 'm'.code.toByte()) {
                             streamEnd = idx
                             break
                         }

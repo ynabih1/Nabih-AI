@@ -2,26 +2,32 @@ package com.example.core.utils
 
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
+import androidx.security.crypto.MasterKey
 import android.util.Log
 
 class SecureStorage(context: Context) {
-    private val masterKeyAlias = try {
-        MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+    private val masterKey = try {
+        MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
     } catch (e: Exception) {
         Log.e("SecureStorage", "Failed to get or create MasterKey", e)
-        "secured_nabih_key_alias"
+        null
     }
 
     private val sharedPrefs by lazy {
         try {
-            EncryptedSharedPreferences.create(
-                "secured_nabih_prefs",
-                masterKeyAlias,
-                context,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
+            if (masterKey != null) {
+                EncryptedSharedPreferences.create(
+                    context,
+                    "secured_nabih_prefs",
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                )
+            } else {
+                throw Exception("MasterKey is null")
+            }
         } catch (e: Exception) {
             Log.e("SecureStorage", "EncryptedSharedPreferences creation failed, falling back to private prefs", e)
             context.getSharedPreferences("secured_nabih_prefs_fallback", Context.MODE_PRIVATE)
