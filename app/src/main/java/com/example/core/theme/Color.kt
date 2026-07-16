@@ -5,13 +5,14 @@ import androidx.compose.ui.graphics.Color
 // Light Theme (Clean Minimalism - Google Blue Philosophy)
 val LightPrimary = Color(0xFF1A73E8) // Standard Premium Google Blue
 val LightOnPrimary = Color(0xFFFFFFFF)
-val LightBackground = Color(0xFFFFFFFF) // Crisp white background
-val LightOnBackground = Color(0xFF1F1F1F) // Dark charcoal text
-val LightSurface = Color(0xFFFFFFFF) // Crisp white surface
-val LightOnSurface = Color(0xFF1F1F1F)
-val LightOutline = Color(0xFFE0E0E0) // Soft premium light grey border
-val LightSurfaceVariant = Color(0xFFF1F3F4) // Google light gray for elements
-val LightOnSurfaceVariant = Color(0xFF5F6368) // Standard gray body text
+val LightBackground = Color(0xFFF9F9F9) // Soft off-white background
+val LightOnBackground = Color(0xFF111827) // Primary dark gray/black text
+val LightSurface = Color(0xFFFFFFFF) // Crisp white surface for cards
+val LightOnSurface = Color(0xFF111827)
+val LightOutline = Color(0xFFD1D5DB) // Outline color #D1D5DB
+val LightOutlineVariant = Color(0xFFE5E7EB) // Divider color #E5E7EB
+val LightSurfaceVariant = Color(0xFFF3F4F6) // Element/container background #F3F4F6
+val LightOnSurfaceVariant = Color(0xFF6B7280) // Secondary text #6B7280
 
 // Dark Theme (Clean Minimalism - Dark Slate)
 val DarkPrimary = Color(0xFF8AB4F8) // Soft light blue accent for dark theme

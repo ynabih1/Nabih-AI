@@ -107,7 +107,8 @@ data class ClaudeRequest(
     val messages: List<ClaudeMessage>,
     val max_tokens: Int = 4000,
     val system: String? = null,
-    val temperature: Float = 0.7f
+    val temperature: Float = 0.7f,
+    val stream: Boolean = false
 )
 
 data class ClaudeContentPart(

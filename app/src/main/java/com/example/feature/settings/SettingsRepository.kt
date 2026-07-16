@@ -12,6 +12,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 class SettingsRepository(context: Context) {
+    companion object {
+        private var isFirstLoad = true
+    }
+
     private val prefs = context.getSharedPreferences("nabih_ai_settings", Context.MODE_PRIVATE)
     private val secureStorage = com.example.core.utils.SecureStorage(context)
 
@@ -38,8 +42,6 @@ class SettingsRepository(context: Context) {
 
         val microsoftEmail = prefs.getString("microsoft_email", "") ?: ""
         val microsoftName = prefs.getString("microsoft_name", "") ?: ""
-        val googleEmail = prefs.getString("google_email", "") ?: ""
-        val googleName = prefs.getString("google_name", "") ?: ""
         val profilePictureUri = prefs.getString("profile_picture_uri", "") ?: ""
         val personalInfo = prefs.getString("personal_info", "") ?: ""
 
@@ -48,6 +50,16 @@ class SettingsRepository(context: Context) {
         } catch (e: Exception) {
             AiModel.NABIH_ULTRA
         }
+
+        val rememberMe = prefs.getBoolean("remember_me", false)
+        var isLoggedInCalculated = prefs.getBoolean("is_logged_in", false)
+        if (isLoggedInCalculated && !rememberMe) {
+            if (isFirstLoad) {
+                isLoggedInCalculated = false
+                prefs.edit().putBoolean("is_logged_in", false).apply()
+            }
+        }
+        isFirstLoad = false
 
         return AppSettings(
             theme = AppTheme.valueOf(themeStr),
@@ -60,13 +72,7 @@ class SettingsRepository(context: Context) {
             googleApiKey = secureStorage.getKey("key_google"),
             openaiApiKey = secureStorage.getKey("key_openai"),
             anthropicApiKey = secureStorage.getKey("key_anthropic"),
-            grokApiKey = secureStorage.getKey("key_grok"),
-            deepseekApiKey = secureStorage.getKey("key_deepseek"),
-            mistralApiKey = secureStorage.getKey("key_mistral"),
-            openRouterApiKey = secureStorage.getKey("key_openrouter"),
-            ollamaEndpoint = secureStorage.getKey("key_ollama"),
-            lmStudioEndpoint = secureStorage.getKey("key_lmstudio"),
-            isLoggedIn = prefs.getBoolean("is_logged_in", false),
+            isLoggedIn = isLoggedInCalculated,
             authType = prefs.getString("auth_type", "") ?: "",
             userEmail = userEmail,
             userName = userName,
@@ -74,8 +80,6 @@ class SettingsRepository(context: Context) {
             personalInfo = personalInfo,
             microsoftEmail = microsoftEmail,
             microsoftName = microsoftName,
-            googleEmail = googleEmail,
-            googleName = googleName,
             biometricsEnabled = prefs.getBoolean("biometrics_enabled", false),
             responseStyle = ResponseStyle.valueOf(prefs.getString("response_style", ResponseStyle.BALANCED.name) ?: ResponseStyle.BALANCED.name),
             memoryEnabled = prefs.getBoolean("memory_enabled", true),
@@ -96,12 +100,10 @@ class SettingsRepository(context: Context) {
     fun switchActiveAccount(authType: String) {
         val email = when (authType) {
             "MICROSOFT" -> prefs.getString("microsoft_email", "") ?: ""
-            "GOOGLE" -> prefs.getString("google_email", "") ?: ""
             else -> ""
         }
         val name = when (authType) {
             "MICROSOFT" -> prefs.getString("microsoft_name", "") ?: ""
-            "GOOGLE" -> prefs.getString("google_name", "") ?: ""
             else -> ""
         }
         if (email.isNotEmpty()) {
@@ -115,12 +117,13 @@ class SettingsRepository(context: Context) {
         }
     }
 
-    fun updateLoginState(isLoggedIn: Boolean, authType: String, userEmail: String, userName: String) {
+    fun updateLoginState(isLoggedIn: Boolean, authType: String, userEmail: String, userName: String, rememberMe: Boolean = false) {
         val currentEmail = prefs.getString("user_email", "") ?: ""
         
         prefs.edit()
             .putBoolean("is_logged_in", isLoggedIn)
             .putString("auth_type", authType)
+            .putBoolean("remember_me", rememberMe)
             .apply()
         
         if (isLoggedIn) {
@@ -143,12 +146,6 @@ class SettingsRepository(context: Context) {
                     prefs.edit()
                         .putString("microsoft_email", userEmail)
                         .putString("microsoft_name", userName)
-                        .apply()
-                }
-                "GOOGLE" -> {
-                    prefs.edit()
-                        .putString("google_email", userEmail)
-                        .putString("google_name", userName)
                         .apply()
                 }
             }
@@ -204,13 +201,17 @@ class SettingsRepository(context: Context) {
                     .putString("microsoft_name", name.trim())
                     .apply()
             }
-            "GOOGLE" -> {
-                prefs.edit()
-                    .putString("google_name", name.trim())
-                    .apply()
-            }
         }
         _settings.value = loadSettings()
+    }
+
+    suspend fun updatePassword(newPasswordHash: String): Boolean {
+        val email = prefs.getString("user_email", "") ?: ""
+        if (email.isNotEmpty()) {
+            userAccountDao.updateUserPassword(email.trim().lowercase(), newPasswordHash)
+            return true
+        }
+        return false
     }
 
     fun updateLanguage(language: AppLanguage) {
@@ -263,25 +264,21 @@ class SettingsRepository(context: Context) {
         nabih: String,
         google: String,
         openai: String,
-        anthropic: String,
-        grok: String = "",
-        deepseek: String = "",
-        mistral: String = "",
-        openRouter: String = "",
-        ollama: String = "",
-        lmStudio: String = ""
+        anthropic: String
     ) {
         secureStorage.saveKey("key_nabih", nabih)
         secureStorage.saveKey("key_google", google)
         secureStorage.saveKey("key_openai", openai)
         secureStorage.saveKey("key_anthropic", anthropic)
-        secureStorage.saveKey("key_grok", grok)
-        secureStorage.saveKey("key_deepseek", deepseek)
-        secureStorage.saveKey("key_mistral", mistral)
-        secureStorage.saveKey("key_openrouter", openRouter)
-        secureStorage.saveKey("key_ollama", ollama)
-        secureStorage.saveKey("key_lmstudio", lmStudio)
         _settings.value = loadSettings()
+    }
+
+    fun getExtraApiKey(keyName: String): String {
+        return secureStorage.getKey(keyName)
+    }
+
+    fun saveExtraApiKey(keyName: String, value: String) {
+        secureStorage.saveKey(keyName, value)
     }
 
     private val userAccountDao by lazy {

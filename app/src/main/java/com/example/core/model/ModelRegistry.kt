@@ -90,66 +90,6 @@ object ModelRegistry {
             status = ModelStatus.AVAILABLE,
             capabilities = ModelCapabilities(text = true, vision = true, reasoning = true, fileAnalysis = true),
             fallbackModelId = "nabih-ultra"
-        ),
-        ModelMetadata(
-            id = "grok-2",
-            displayName = "Grok 2",
-            provider = ApiProvider.GROK,
-            description = "xAI's latest model with real-time knowledge.",
-            version = "v2.0-stable",
-            status = ModelStatus.AVAILABLE,
-            capabilities = ModelCapabilities(text = true, reasoning = true),
-            fallbackModelId = "nabih-ultra"
-        ),
-        ModelMetadata(
-            id = "deepseek-coder-v2",
-            displayName = "DeepSeek Coder",
-            provider = ApiProvider.DEEPSEEK,
-            description = "DeepSeek's advanced coding and reasoning model.",
-            version = "v2.0-stable",
-            status = ModelStatus.AVAILABLE,
-            capabilities = ModelCapabilities(text = true, reasoning = true, fileAnalysis = true),
-            fallbackModelId = "nabih-ultra"
-        ),
-        ModelMetadata(
-            id = "mistral-large-latest",
-            displayName = "Mistral Large",
-            provider = ApiProvider.MISTRAL,
-            description = "Mistral AI's top-tier reasoning model.",
-            version = "large-stable",
-            status = ModelStatus.AVAILABLE,
-            capabilities = ModelCapabilities(text = true, reasoning = true),
-            fallbackModelId = "nabih-ultra"
-        ),
-        ModelMetadata(
-            id = "openrouter-auto",
-            displayName = "OpenRouter",
-            provider = ApiProvider.OPENROUTER,
-            description = "Intelligently routes to the best model across providers.",
-            version = "auto",
-            status = ModelStatus.AVAILABLE,
-            capabilities = ModelCapabilities(text = true, reasoning = true),
-            fallbackModelId = "nabih-ultra"
-        ),
-        ModelMetadata(
-            id = "ollama-local",
-            displayName = "Ollama (Local)",
-            provider = ApiProvider.OLLAMA,
-            description = "Runs open-weight models locally on your device or network.",
-            version = "local",
-            status = ModelStatus.AVAILABLE,
-            capabilities = ModelCapabilities(text = true),
-            fallbackModelId = "nabih-ultra"
-        ),
-        ModelMetadata(
-            id = "lmstudio-local",
-            displayName = "LM Studio (Local)",
-            provider = ApiProvider.LMSTUDIO,
-            description = "Connects to your local LM Studio instance.",
-            version = "local",
-            status = ModelStatus.AVAILABLE,
-            capabilities = ModelCapabilities(text = true),
-            fallbackModelId = "nabih-ultra"
         )
     )
 

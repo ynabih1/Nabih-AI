@@ -94,5 +94,8 @@ interface UserAccountDao {
     
     @Query("UPDATE user_accounts SET email = :newEmail WHERE email = :oldEmail")
     suspend fun updateUserEmail(oldEmail: String, newEmail: String)
+
+    @Query("UPDATE user_accounts SET passwordHash = :newPasswordHash WHERE email = :email")
+    suspend fun updateUserPassword(email: String, newPasswordHash: String)
 }
 

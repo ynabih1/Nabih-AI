@@ -25,8 +25,7 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
     var geminiKey = System.getenv("GEMINI_API_KEY")
-    var googleClientId = System.getenv("GOOGLE_CLIENT_ID")
-    if (geminiKey.isNullOrEmpty() || googleClientId.isNullOrEmpty()) {
+    if (geminiKey.isNullOrEmpty()) {
         val envFile = rootProject.file(".env")
         val envExampleFile = rootProject.file(".env.example")
         val props = Properties()
@@ -36,10 +35,8 @@ android {
             props.load(FileInputStream(envExampleFile))
         }
         if (geminiKey.isNullOrEmpty()) geminiKey = props.getProperty("GEMINI_API_KEY") ?: ""
-        if (googleClientId.isNullOrEmpty()) googleClientId = props.getProperty("GOOGLE_CLIENT_ID") ?: ""
     }
     buildConfigField("String", "GEMINI_API_KEY", "\"${geminiKey}\"")
-    buildConfigField("String", "GOOGLE_CLIENT_ID", "\"${googleClientId}\"")
   }
 
   signingConfigs {
@@ -85,7 +82,6 @@ secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("GEMINI_API_KEY")
-  ignoreList.add("GOOGLE_CLIENT_ID")
 }
 
 googleServices {
@@ -127,11 +123,12 @@ dependencies {
   implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
-  implementation(libs.play.services.auth)
+  // Commented out Google Sign-In libraries
+  // implementation(libs.play.services.auth)
   implementation(libs.androidx.security.crypto)
-  implementation(libs.androidx.credentials)
-  implementation(libs.androidx.credentials.play.services.auth)
-  implementation(libs.googleid)
+  // implementation(libs.androidx.credentials)
+  // implementation(libs.androidx.credentials.play.services.auth)
+  // implementation(libs.googleid)
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
   testImplementation(libs.androidx.compose.ui.test.junit4)

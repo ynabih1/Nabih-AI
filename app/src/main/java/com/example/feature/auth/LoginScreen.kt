@@ -1,7 +1,6 @@
 package com.example.feature.auth
 
 import com.example.R
-
 import com.example.core.model.AppLanguage
 import com.example.feature.settings.SettingsViewModel
 
@@ -19,8 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material.icons.automirrored.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -44,16 +43,37 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import android.app.Activity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.credentials.CredentialManager
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.exceptions.GetCredentialException
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import java.security.MessageDigest
-import java.util.UUID
+
+enum class PasswordStrength(val labelEn: String, val labelAr: String, val color: Color, val progress: Float) {
+    EMPTY("", "", Color.Transparent, 0f),
+    WEAK("Weak", "ضعيفة", Color(0xFFE53935), 0.25f),
+    MEDIUM("Medium", "متوسطة", Color(0xFFFFB300), 0.6f),
+    STRONG("Strong", "قوية", Color(0xFF43A047), 1.0f)
+}
+
+fun calculatePasswordStrength(password: String): PasswordStrength {
+    if (password.isEmpty()) return PasswordStrength.EMPTY
+    if (password.length < 6) return PasswordStrength.WEAK
+    
+    var score = 0
+    if (password.length >= 8) score++
+    if (password.any { it.isUpperCase() } && password.any { it.isLowerCase() }) score++
+    if (password.any { it.isDigit() }) score++
+    if (password.any { !it.isLetterOrDigit() }) score++
+    
+    return when {
+        score >= 3 -> PasswordStrength.STRONG
+        score >= 1 -> PasswordStrength.MEDIUM
+        else -> PasswordStrength.WEAK
+    }
+}
+
+fun hashPassword(password: String): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    val hashBytes = digest.digest(password.toByteArray(Charsets.UTF_8))
+    return hashBytes.fold("") { str, it -> str + "%02x".format(it) }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,50 +88,31 @@ fun LoginScreen(
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
     val isArabic = settings.language == AppLanguage.ARABIC
 
-    val activity = context as? Activity
-
-    // Login screen states
-    var currentStep by remember { mutableStateOf(0) } // 0: Onboarding, 1: Sign In Options, 2: Email Form, 3: Sign Up Form
+    // Login screen states: 
+    // 0: Onboarding, 1: Sign In Form, 2: Sign Up Form, 3: Forgot Password, 4: Verification & Reset
+    var currentStep by remember { mutableStateOf(0) }
+    
+    // Inputs
     var emailInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
     var nameInput by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        val googleId = com.example.BuildConfig.GOOGLE_CLIENT_ID
-        if (googleId.isEmpty() || googleId.contains("YOUR_") || googleId.contains("placeholder")) {
-            android.util.Log.w("LoginScreen", "Google Client ID is missing or not configured correctly.")
-        }
-    }
-
-    // Google Sign-In Error state
-
-    // Google Sign-In with CredentialManager
-    val credentialManager = remember { CredentialManager.create(context) }
+    var confirmPasswordInput by remember { mutableStateOf("") }
     
-    fun handleGoogleSignIn(email: String, name: String) {
-        scope.launch {
-            isLoading = true
-            var registeredUser = settingsViewModel.getUserByEmail(email)
-            if (registeredUser == null) {
-                android.util.Log.d("LoginScreen", "User not found locally. Registering implicitly for OAuth.")
-                val defaultName = if (name.isNotBlank()) name else email.substringBefore("@")
-                settingsViewModel.registerUser(email, defaultName, "oauth_google")
-                registeredUser = settingsViewModel.getUserByEmail(email)
-            }
-            isLoading = false
-            if (registeredUser != null) {
-                settingsViewModel.updateLoginState(true, "GOOGLE", email, name.ifBlank { registeredUser.name })
-                Toast.makeText(context, if (isArabic) "مرحباً بك ${registeredUser.name}" else "Welcome, ${registeredUser.name}!", Toast.LENGTH_SHORT).show()
-                onLoginSuccess()
-            } else {
-                Toast.makeText(context, if (isArabic) "الحساب غير موجود." else "Account not found.", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-
+    // Remember Me
+    var rememberMe by remember { mutableStateOf(true) }
+    
+    // Forgot password states
+    var forgotEmailInput by remember { mutableStateOf("") }
+    var generatedResetCode by remember { mutableStateOf("") }
+    var verificationCodeInput by remember { mutableStateOf("") }
+    var newPasswordInput by remember { mutableStateOf("") }
+    var confirmNewPasswordInput by remember { mutableStateOf("") }
+    
+    // Security / Visibility
+    var passwordVisible by remember { mutableStateOf(false) }
+    var newPasswordVisible by remember { mutableStateOf(false) }
+    var termsAccepted by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
 
     // Onboarding items
     val onboardingSlides = remember(isArabic) {
@@ -119,31 +120,19 @@ fun LoginScreen(
             OnboardingSlide(
                 title = if (isArabic) "محادثات ذكية فائقة الدقة" else "Intelligent Conversations",
                 description = if (isArabic) "تواصل مع نماذج متطورة مدعومة بقدرات التفكير العلمي العميق وحل المشكلات المعقدة." else "Engage with advanced AI models optimized for scientific reasoning and complex problem-solving.",
-                icon = Icons.Outlined.Lightbulb
+                icon = Icons.Rounded.Lightbulb
             ),
             OnboardingSlide(
                 title = if (isArabic) "تحليل متعدد الوسائط ذكي" else "Multimodal Processing",
                 description = if (isArabic) "حلل المستندات والصور والمستندات التقنية والأكواد البرمجية بلمحة بصر." else "Instantly digest and analyze documents, high-res images, files, and complete technical codebases.",
-                icon = Icons.Outlined.DocumentScanner
+                icon = Icons.Rounded.DocumentScanner
             ),
             OnboardingSlide(
                 title = if (isArabic) "توجيه تلقائي ذكي ومستقر" else "Automatic Failover & Stability",
                 description = if (isArabic) "استمتع باتصال آمن، مستقر، وموجّه تلقائياً إلى أفضل النماذج العاملة دون الحاجة لضبط مفاتيح API." else "Experience seamless AI services that automatically select the best model and failover if any API is unavailable.",
-                icon = Icons.Outlined.CloudQueue
+                icon = Icons.Rounded.CloudQueue
             )
         )
-    }
-
-    // Auto rotate onboarding slides
-    LaunchedEffect(currentStep) {
-        if (currentStep == 0) {
-            var slideIndex = 0
-            while (currentStep == 0) {
-                delay(4000)
-                slideIndex = (slideIndex + 1) % onboardingSlides.size
-                // Smooth transition in mock or let state cycle
-            }
-        }
     }
 
     Box(
@@ -151,7 +140,7 @@ fun LoginScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Decorative background elements using beautiful Compose gradients
+        // Decorative background elements
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -171,18 +160,18 @@ fun LoginScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(24.dp),
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             // Header: App Logo & Name
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 32.dp)
+                modifier = Modifier.padding(top = 16.dp)
             ) {
                 Box(
-                    modifier = Modifier
-                        .size(80.dp),
+                    modifier = Modifier.size(80.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -192,7 +181,7 @@ fun LoginScreen(
                         modifier = Modifier.size(72.dp)
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = "Nabih AI",
                     style = MaterialTheme.typography.headlineMedium,
@@ -212,14 +201,14 @@ fun LoginScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(vertical = 24.dp),
+                    .padding(vertical = 16.dp),
                 contentAlignment = Alignment.Center
             ) {
                 AnimatedContent(
                     targetState = currentStep,
                     transitionSpec = {
                         slideInHorizontally { width -> if (targetState > initialState) width else -width } + fadeIn() togetherWith
-                                slideOutHorizontally { width -> if (targetState > initialState) -width else width } + fadeOut()
+                        slideOutHorizontally { width -> if (targetState > initialState) -width else width } + fadeOut()
                     },
                     label = "auth_screen_navigation"
                 ) { step ->
@@ -231,14 +220,13 @@ fun LoginScreen(
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                // Dynamic Onboarding Card
                                 var activeSlideIndex by remember { mutableStateOf(0) }
                                 val activeSlide = onboardingSlides[activeSlideIndex]
 
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .heightIn(min = 220.dp),
+                                        .heightIn(min = 200.dp),
                                     shape = RoundedCornerShape(24.dp),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                                     border = CardDefaults.outlinedCardBorder().copy(
@@ -328,170 +316,24 @@ fun LoginScreen(
                         }
 
                         1 -> {
-                            // Premium Minimalist Sign-in Options
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = if (isArabic) "تسجيل الدخول الآمن" else "Secure Sign In",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Text(
-                                    text = if (isArabic) "اختر طريقة تسجيل الدخول المفضلة لديك" else "Select your preferred authentication method",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                                )
-
-
-
-                                 // Google Sign In Button (Premium Minimalist Design)
-                                OutlinedButton(
-                                    onClick = {
-                                        val clientId = com.example.BuildConfig.GOOGLE_CLIENT_ID
-                                        val isClientIdMissing = clientId.isEmpty() || clientId.contains("YOUR_GOOGLE") || clientId.contains("placeholder")
-                                        if (isClientIdMissing) {
-                                            Toast.makeText(context, if (isArabic) "معرّف عميل Google غير مضبوط في الإعدادات." else "Google Client ID is missing or not configured.", Toast.LENGTH_LONG).show()
-                                        } else {
-                                            scope.launch {
-                                                isLoading = true
-                                                try {
-                                                    val rawNonce = UUID.randomUUID().toString()
-                                                    val bytes = rawNonce.toByteArray()
-                                                    val md = MessageDigest.getInstance("SHA-256")
-                                                    val digest = md.digest(bytes)
-                                                    val hashedNonce = digest.fold("") { str, it -> str + "%02x".format(it) }
-                                                    
-                                                    val googleIdOption = GetGoogleIdOption.Builder()
-                                                        .setFilterByAuthorizedAccounts(false)
-                                                        .setServerClientId(clientId)
-                                                        .setNonce(hashedNonce)
-                                                        .build()
-                                                        
-                                                    val request = GetCredentialRequest.Builder()
-                                                        .addCredentialOption(googleIdOption)
-                                                        .build()
-                                                        
-                                                    val result = credentialManager.getCredential(
-                                                        request = request,
-                                                        context = context,
-                                                    )
-                                                    
-                                                    val credential = result.credential
-                                                    if (credential is androidx.credentials.CustomCredential &&
-                                                        credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                                                        val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                                                        val email = googleIdTokenCredential.id
-                                                        val name = googleIdTokenCredential.displayName ?: ""
-                                                        handleGoogleSignIn(email, name)
-                                                    } else {
-                                                        android.util.Log.w("LoginScreen", "Received unexpected credential type")
-                                                        isLoading = false
-                                                    }
-                                                } catch (e: GetCredentialException) {
-                                                    android.util.Log.e("LoginScreen", "GetCredentialException: ${e.message}")
-                                                    Toast.makeText(context, if (isArabic) "تم الإلغاء أو فشل الاتصال." else "Google Sign-In failed or cancelled.", Toast.LENGTH_SHORT).show()
-                                                    isLoading = false
-                                                } catch (e: Exception) {
-                                                    android.util.Log.e("LoginScreen", "Google Sign In Error", e)
-                                                    isLoading = false
-                                                }
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(54.dp)
-                                        .testTag("google_login_button"),
-                                    shape = RoundedCornerShape(14.dp),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
-                                    colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(20.dp)
-                                                .background(Color.White, shape = CircleShape),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = "G",
-                                                color = Color(0xFF4285F4),
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = if (isArabic) "متابعة باستخدام حساب Google" else "Continue with Google Account",
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onBackground
-                                        )
-                                    }
-                                }
-
-                                // Email & Password Button
-                                Button(
-                                    onClick = { currentStep = 2 },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(54.dp)
-                                        .testTag("email_login_form_button"),
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(Icons.Default.Email, null, modifier = Modifier.size(20.dp))
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = if (isArabic) "تسجيل الدخول بالبريد وكلمة المرور" else "Sign in with Email",
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-
-
-                            }
-                        }
-
-                        2 -> {
                             // Email & Password login Form
                             Column(
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    IconButton(onClick = { currentStep = 1 }) {
-                                        Icon(Icons.Default.ArrowBack, "Back")
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = if (isArabic) "تسجيل الدخول" else "Sign In",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
+                                Text(
+                                    text = if (isArabic) "تسجيل الدخول" else "Sign In",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Start
+                                )
 
                                 OutlinedTextField(
                                     value = emailInput,
                                     onValueChange = { emailInput = it },
                                     label = { Text(if (isArabic) "البريد الإلكتروني" else "Email Address") },
-                                    leadingIcon = { Icon(Icons.Default.Email, null, tint = MaterialTheme.colorScheme.primary) },
+                                    leadingIcon = { Icon(Icons.Rounded.Email, null, tint = MaterialTheme.colorScheme.primary) },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                                     singleLine = true,
                                     shape = RoundedCornerShape(12.dp),
@@ -502,11 +344,11 @@ fun LoginScreen(
                                     value = passwordInput,
                                     onValueChange = { passwordInput = it },
                                     label = { Text(if (isArabic) "كلمة المرور" else "Password") },
-                                    leadingIcon = { Icon(Icons.Default.Lock, null, tint = MaterialTheme.colorScheme.primary) },
+                                    leadingIcon = { Icon(Icons.Rounded.Lock, null, tint = MaterialTheme.colorScheme.primary) },
                                     trailingIcon = {
                                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                             Icon(
-                                                imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                                imageVector = if (passwordVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.primary
                                             )
@@ -518,6 +360,35 @@ fun LoginScreen(
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().testTag("password_input")
                                 )
+
+                                // Remember Me & Forgot Password link row
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable { rememberMe = !rememberMe }
+                                    ) {
+                                        Checkbox(
+                                            checked = rememberMe,
+                                            onCheckedChange = { rememberMe = it }
+                                        )
+                                        Text(
+                                            text = if (isArabic) "تذكرني" else "Remember Me",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                    Text(
+                                        text = if (isArabic) "نسيت كلمة المرور؟" else "Forgot Password?",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.clickable { currentStep = 3 }
+                                    )
+                                }
 
                                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -541,17 +412,20 @@ fun LoginScreen(
                                                         "Account not found. Please create an account first."
                                                     }
                                                     Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                                                } else if (user.passwordHash != passwordInput) {
-                                                    val msg = if (isArabic) {
-                                                        "البريد الإلكتروني أو كلمة المرور غير صحيحة."
-                                                    } else {
-                                                        "Incorrect email or password."
-                                                    }
-                                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                                 } else {
-                                                    settingsViewModel.updateLoginState(true, "EMAIL", user.email, user.name)
-                                                    Toast.makeText(context, if (isArabic) "مرحباً بك ${user.name}" else "Welcome, ${user.name}!", Toast.LENGTH_SHORT).show()
-                                                    onLoginSuccess()
+                                                    val isPasswordCorrect = (user.passwordHash == hashPassword(passwordInput) || user.passwordHash == passwordInput)
+                                                    if (!isPasswordCorrect) {
+                                                        val msg = if (isArabic) {
+                                                            "البريد الإلكتروني أو كلمة المرور غير صحيحة."
+                                                        } else {
+                                                            "Incorrect email or password."
+                                                        }
+                                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                                    } else {
+                                                        settingsViewModel.updateLoginState(true, "EMAIL", user.email, user.name, rememberMe)
+                                                        Toast.makeText(context, if (isArabic) "مرحباً بك ${user.name}" else "Welcome, ${user.name}!", Toast.LENGTH_SHORT).show()
+                                                        onLoginSuccess()
+                                                    }
                                                 }
                                             }
                                         }
@@ -581,14 +455,16 @@ fun LoginScreen(
                                         text = if (isArabic) "أنشئ حساباً جديداً" else "Sign Up",
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.clickable { currentStep = 3 }
+                                        modifier = Modifier.clickable { currentStep = 2 }
                                     )
                                 }
                             }
                         }
 
-                        3 -> {
+                        2 -> {
                             // Sign Up Form
+                            val strength = calculatePasswordStrength(passwordInput)
+                            
                             Column(
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
                                 modifier = Modifier.fillMaxWidth()
@@ -597,8 +473,8 @@ fun LoginScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    IconButton(onClick = { currentStep = 2 }) {
-                                        Icon(Icons.Default.ArrowBack, "Back")
+                                    IconButton(onClick = { currentStep = 1 }) {
+                                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
@@ -612,7 +488,7 @@ fun LoginScreen(
                                     value = nameInput,
                                     onValueChange = { nameInput = it },
                                     label = { Text(if (isArabic) "الاسم الكامل" else "Full Name") },
-                                    leadingIcon = { Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.primary) },
+                                    leadingIcon = { Icon(Icons.Rounded.Person, null, tint = MaterialTheme.colorScheme.primary) },
                                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                                     singleLine = true,
                                     shape = RoundedCornerShape(12.dp),
@@ -623,7 +499,7 @@ fun LoginScreen(
                                     value = emailInput,
                                     onValueChange = { emailInput = it },
                                     label = { Text(if (isArabic) "البريد الإلكتروني" else "Email Address") },
-                                    leadingIcon = { Icon(Icons.Default.Email, null, tint = MaterialTheme.colorScheme.primary) },
+                                    leadingIcon = { Icon(Icons.Rounded.Email, null, tint = MaterialTheme.colorScheme.primary) },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                                     singleLine = true,
                                     shape = RoundedCornerShape(12.dp),
@@ -634,22 +510,83 @@ fun LoginScreen(
                                     value = passwordInput,
                                     onValueChange = { passwordInput = it },
                                     label = { Text(if (isArabic) "كلمة المرور" else "Password") },
-                                    leadingIcon = { Icon(Icons.Default.Lock, null, tint = MaterialTheme.colorScheme.primary) },
+                                    leadingIcon = { Icon(Icons.Rounded.Lock, null, tint = MaterialTheme.colorScheme.primary) },
                                     trailingIcon = {
                                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                             Icon(
-                                                imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                                imageVector = if (passwordVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.primary
                                             )
                                         }
                                     },
                                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
                                     singleLine = true,
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().testTag("password_signup_input")
                                 )
+
+                                // Password Strength indicator
+                                if (passwordInput.isNotEmpty()) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = if (isArabic) "قوة كلمة المرور:" else "Password strength:",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                                            )
+                                            Text(
+                                                text = if (isArabic) strength.labelAr else strength.labelEn,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = strength.color
+                                            )
+                                        }
+                                        LinearProgressIndicator(
+                                            progress = { strength.progress },
+                                            color = strength.color,
+                                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(6.dp)
+                                                .clip(RoundedCornerShape(3.dp))
+                                        )
+                                    }
+                                }
+
+                                OutlinedTextField(
+                                    value = confirmPasswordInput,
+                                    onValueChange = { confirmPasswordInput = it },
+                                    label = { Text(if (isArabic) "تأكيد كلمة المرور" else "Confirm Password") },
+                                    leadingIcon = { Icon(Icons.Rounded.Lock, null, tint = MaterialTheme.colorScheme.primary) },
+                                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                // Terms and Privacy acceptance row
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { termsAccepted = !termsAccepted },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = termsAccepted,
+                                        onCheckedChange = { termsAccepted = it }
+                                    )
+                                    Text(
+                                        text = if (isArabic) "أوافق على شروط الخدمة وسياسة الخصوصية" else "I accept the Terms & Privacy Policy",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                                    )
+                                }
 
                                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -660,6 +597,12 @@ fun LoginScreen(
                                             Toast.makeText(context, if (isArabic) "يرجى ملء كافة التفاصيل" else "Please fill in all details", Toast.LENGTH_SHORT).show()
                                         } else if (!emailPattern.matcher(emailInput.trim()).matches()) {
                                             Toast.makeText(context, if (isArabic) "يرجى إدخال عنوان بريد إلكتروني صحيح." else "Please enter a valid email address.", Toast.LENGTH_LONG).show()
+                                        } else if (passwordInput.length < 6) {
+                                            Toast.makeText(context, if (isArabic) "يجب أن تكون كلمة المرور 6 أحرف على الأقل." else "Password must be at least 6 characters.", Toast.LENGTH_LONG).show()
+                                        } else if (passwordInput != confirmPasswordInput) {
+                                            Toast.makeText(context, if (isArabic) "كلمات المرور غير متطابقة." else "Passwords do not match.", Toast.LENGTH_LONG).show()
+                                        } else if (!termsAccepted) {
+                                            Toast.makeText(context, if (isArabic) "يرجى الموافقة على الشروط أولاً." else "Please accept the Terms & Privacy Policy first.", Toast.LENGTH_SHORT).show()
                                         } else {
                                             scope.launch {
                                                 isLoading = true
@@ -674,8 +617,9 @@ fun LoginScreen(
                                                     }
                                                     Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                                 } else {
-                                                    settingsViewModel.registerUser(emailInput, nameInput, passwordInput)
-                                                    settingsViewModel.updateLoginState(true, "EMAIL", emailInput, nameInput)
+                                                    val secureHashedPassword = hashPassword(passwordInput)
+                                                    settingsViewModel.registerUser(emailInput, nameInput, secureHashedPassword)
+                                                    settingsViewModel.updateLoginState(true, "EMAIL", emailInput, nameInput, rememberMe)
                                                     isLoading = false
                                                     Toast.makeText(context, if (isArabic) "تم إنشاء الحساب بنجاح!" else "Account created successfully!", Toast.LENGTH_SHORT).show()
                                                     onLoginSuccess()
@@ -708,8 +652,224 @@ fun LoginScreen(
                                         text = if (isArabic) "سجل دخولك هنا" else "Sign In",
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.clickable { currentStep = 2 }
+                                        modifier = Modifier.clickable { currentStep = 1 }
                                     )
+                                }
+                            }
+                        }
+
+                        3 -> {
+                            // Forgot Password Screen
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    IconButton(onClick = { currentStep = 1 }) {
+                                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isArabic) "استعادة كلمة المرور" else "Forgot Password",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                Text(
+                                    text = if (isArabic) "أدخل بريدك الإلكتروني لإرسال رمز التحقق المكون من 6 أرقام." else "Enter your email address to receive a secure 6-digit verification code.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                                )
+
+                                OutlinedTextField(
+                                    value = forgotEmailInput,
+                                    onValueChange = { forgotEmailInput = it },
+                                    label = { Text(if (isArabic) "البريد الإلكتروني" else "Email Address") },
+                                    leadingIcon = { Icon(Icons.Rounded.Email, null, tint = MaterialTheme.colorScheme.primary) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Button(
+                                    onClick = {
+                                        val emailPattern = android.util.Patterns.EMAIL_ADDRESS
+                                        if (forgotEmailInput.isBlank()) {
+                                            Toast.makeText(context, if (isArabic) "يرجى كتابة البريد الإلكتروني" else "Please enter your email", Toast.LENGTH_SHORT).show()
+                                        } else if (!emailPattern.matcher(forgotEmailInput.trim()).matches()) {
+                                            Toast.makeText(context, if (isArabic) "بريد إلكتروني غير صحيح" else "Invalid email address", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            scope.launch {
+                                                isLoading = true
+                                                delay(1200)
+                                                val user = settingsViewModel.getUserByEmail(forgotEmailInput)
+                                                isLoading = false
+                                                if (user == null) {
+                                                    Toast.makeText(context, if (isArabic) "لم يتم العثور على حساب بهذا البريد" else "No account found with this email", Toast.LENGTH_LONG).show()
+                                                } else {
+                                                    // Generate 6-digit random code and toast it for testing simulation
+                                                    val randomCode = (100000..999999).random().toString()
+                                                    generatedResetCode = randomCode
+                                                    Toast.makeText(context, if (isArabic) "تم إرسال الرمز! رمز التحقق هو: $randomCode" else "Verification code sent! Code is: $randomCode", Toast.LENGTH_LONG).show()
+                                                    currentStep = 4
+                                                }
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(54.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(if (isArabic) "إرسال رمز التحقق" else "Send Verification Code", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+
+                        4 -> {
+                            // Verification & Password Reset Screen
+                            val resetStrength = calculatePasswordStrength(newPasswordInput)
+                            
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    IconButton(onClick = { currentStep = 3 }) {
+                                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isArabic) "إعادة تعيين كلمة المرور" else "Reset Password",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                Text(
+                                    text = if (isArabic) "أدخل الرمز المكون من 6 أرقام المرسل إلى بريدك الإلكتروني مع كلمة المرور الجديدة." else "Enter the 6-digit code sent to your email and set a new secure password.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                                )
+
+                                OutlinedTextField(
+                                    value = verificationCodeInput,
+                                    onValueChange = { verificationCodeInput = it },
+                                    label = { Text(if (isArabic) "رمز التحقق (6 أرقام)" else "6-Digit Verification Code") },
+                                    leadingIcon = { Icon(Icons.Rounded.VpnKey, null, tint = MaterialTheme.colorScheme.primary) },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                OutlinedTextField(
+                                    value = newPasswordInput,
+                                    onValueChange = { newPasswordInput = it },
+                                    label = { Text(if (isArabic) "كلمة المرور الجديدة" else "New Password") },
+                                    leadingIcon = { Icon(Icons.Rounded.Lock, null, tint = MaterialTheme.colorScheme.primary) },
+                                    trailingIcon = {
+                                        IconButton(onClick = { newPasswordVisible = !newPasswordVisible }) {
+                                            Icon(
+                                                imageVector = if (newPasswordVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    },
+                                    visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                if (newPasswordInput.isNotEmpty()) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = if (isArabic) "قوة كلمة المرور:" else "Password strength:",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                                            )
+                                            Text(
+                                                text = if (isArabic) resetStrength.labelAr else resetStrength.labelEn,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = resetStrength.color
+                                            )
+                                        }
+                                        LinearProgressIndicator(
+                                            progress = { resetStrength.progress },
+                                            color = resetStrength.color,
+                                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(6.dp)
+                                                .clip(RoundedCornerShape(3.dp))
+                                        )
+                                    }
+                                }
+
+                                OutlinedTextField(
+                                    value = confirmNewPasswordInput,
+                                    onValueChange = { confirmNewPasswordInput = it },
+                                    label = { Text(if (isArabic) "تأكيد كلمة المرور الجديدة" else "Confirm New Password") },
+                                    leadingIcon = { Icon(Icons.Rounded.Lock, null, tint = MaterialTheme.colorScheme.primary) },
+                                    visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Button(
+                                    onClick = {
+                                        if (verificationCodeInput.trim() != generatedResetCode) {
+                                            Toast.makeText(context, if (isArabic) "رمز التحقق غير صحيح!" else "Incorrect verification code!", Toast.LENGTH_SHORT).show()
+                                        } else if (newPasswordInput.length < 6) {
+                                            Toast.makeText(context, if (isArabic) "يجب أن تكون كلمة المرور 6 أحرف على الأقل" else "Password must be at least 6 characters", Toast.LENGTH_SHORT).show()
+                                        } else if (newPasswordInput != confirmNewPasswordInput) {
+                                            Toast.makeText(context, if (isArabic) "كلمات المرور غير متطابقة" else "Passwords do not match", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            scope.launch {
+                                                isLoading = true
+                                                delay(1000)
+                                                // Temporarily login user to settings to update password
+                                                settingsViewModel.updateLoginState(true, "EMAIL", forgotEmailInput, "")
+                                                val success = settingsViewModel.updatePassword(hashPassword(newPasswordInput))
+                                                settingsViewModel.logout() // Securely logout after update
+                                                isLoading = false
+                                                if (success) {
+                                                    Toast.makeText(context, if (isArabic) "تم تغيير كلمة المرور بنجاح! الرجاء تسجيل الدخول الآن." else "Password updated successfully! Please login now.", Toast.LENGTH_LONG).show()
+                                                    currentStep = 1
+                                                } else {
+                                                    Toast.makeText(context, if (isArabic) "حدث خطأ أثناء التحديث" else "Failed to update password", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(54.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(if (isArabic) "تأكيد وإعادة التعيين" else "Confirm & Reset Password", fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -756,7 +916,7 @@ fun LoginScreen(
                     ) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         Text(
-                            text = if (isArabic) "جاري المصادقة الآمنة..." else "Authenticating securely...",
+                            text = if (isArabic) "جاري العمل بشكل آمن..." else "Working securely...",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -764,10 +924,8 @@ fun LoginScreen(
                 }
             }
         }
-
     }
 }
-
 
 data class OnboardingSlide(
     val title: String,

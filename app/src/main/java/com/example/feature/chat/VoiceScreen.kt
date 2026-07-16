@@ -16,7 +16,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material.icons.automirrored.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -112,7 +113,7 @@ fun VoiceScreen(
                 ttsEngine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
                         isAiSpeaking = true
-                        voiceStateText = if (isArabic) "يتحدث نبيه الآن..." else "Nabih is speaking..."
+                        voiceStateText = if (isArabic) "يتحدث Nabih AI الآن..." else "Nabih AI is speaking..."
                     }
 
                     override fun onDone(utteranceId: String?) {
@@ -199,7 +200,7 @@ fun VoiceScreen(
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val recognizedText = matches?.firstOrNull()
                 if (!recognizedText.isNullOrBlank()) {
-                    voiceStateText = if (isArabic) "جاري التفكير مع نبيه..." else "Nabih is thinking..."
+                    voiceStateText = if (isArabic) "جاري التفكير مع Nabih AI..." else "Nabih AI is thinking..."
                     chatViewModel.sendMessage(recognizedText)
                 } else {
                     isListening = false
@@ -262,15 +263,25 @@ fun VoiceScreen(
         }
     }
 
+    val hapticFeedback = androidx.compose.ui.platform.LocalHapticFeedback.current
+
+    // Animatable size for modern circular mic button
+    val buttonSize by animateDpAsState(
+        targetValue = if (isListening) 130.dp else 115.dp,
+        animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+        label = "buttonSize"
+    )
+
     // Pulse Wave animations
-    val infiniteTransition = rememberInfiniteTransition()
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val waveScale1 by infiniteTransition.animateFloat(
         initialValue = 0.8f,
         targetValue = 1.6f,
         animationSpec = infiniteRepeatable(
             animation = tween(1500, easing = LinearOutSlowInEasing),
             repeatMode = RepeatMode.Restart
-        )
+        ),
+        label = "scale1"
     )
     val waveScale2 by infiniteTransition.animateFloat(
         initialValue = 0.8f,
@@ -278,16 +289,17 @@ fun VoiceScreen(
         animationSpec = infiniteRepeatable(
             animation = tween(2000, easing = LinearOutSlowInEasing),
             repeatMode = RepeatMode.Restart
-        )
+        ),
+        label = "scale2"
     )
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isArabic) "المحادثة الصوتية الذكية" else "Advanced AI Voice Mode", fontWeight = FontWeight.Bold) },
+                title = { Text(if (isArabic) "المحادثة الصوتية" else "Voice Mode", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -299,37 +311,16 @@ fun VoiceScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(innerPadding)
-                .padding(24.dp),
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.Center
         ) {
-            // Header
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = if (isArabic) "نبيه الصوتي الذكي" else "Nabih Voice Intelligence",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center
-                )
-            }
+            Spacer(modifier = Modifier.weight(1f))
 
-            // Central Pulsing Orb or Interruption Overlay
+            // Central Pulsing Orb
             Box(
                 modifier = Modifier
-                    .size(240.dp)
-                    .weight(1f)
-                    .clickable {
-                        // Instant interruption action!
-                        if (isAiSpeaking) {
-                            ttsEngine?.stop()
-                            isAiSpeaking = false
-                            isListening = true
-                        }
-                    },
+                    .size(260.dp),
                 contentAlignment = Alignment.Center
             ) {
                 if (isListening || isAiSpeaking) {
@@ -367,42 +358,53 @@ fun VoiceScreen(
                     }
                 }
 
-                // Core Button/Avatar
+                // Core Floating Circular Material 3 Microphone Button
                 Box(
                     modifier = Modifier
-                        .size(110.dp)
+                        .size(buttonSize)
                         .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
                                 colors = if (isAiSpeaking) {
-                                    listOf(MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f))
+                                    listOf(MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f))
+                                } else if (isListening) {
+                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
                                 } else {
-                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                                    listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.outlineVariant)
                                 }
                             )
-                        ),
+                        )
+                        .clickable {
+                            hapticFeedback.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            if (isAiSpeaking) {
+                                ttsEngine?.stop()
+                                isAiSpeaking = false
+                                isListening = true
+                            } else {
+                                isListening = !isListening
+                            }
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     if (isAiSpeaking) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.VolumeUp, null, tint = Color.White, modifier = Modifier.size(36.dp))
-                            Text(
-                                if (isArabic) "انقر للمقاطعة" else "Tap to Stop",
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Rounded.VolumeUp,
+                            contentDescription = "AI Speaking",
+                            tint = Color.White,
+                            modifier = Modifier.size(42.dp)
+                        )
                     } else {
                         Icon(
-                            imageVector = if (isListening) Icons.Default.Mic else Icons.Default.MicOff,
-                            contentDescription = "Session state",
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
+                            imageVector = if (isListening) Icons.Rounded.Mic else Icons.Rounded.MicOff,
+                            contentDescription = "Microphone State",
+                            tint = if (isListening) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(42.dp)
                         )
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Real-time scrolling spectrum spectrometer waveform!
             AnimatedVisibility(
@@ -412,8 +414,9 @@ fun VoiceScreen(
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
                 ) {
                     val primaryColor = MaterialTheme.colorScheme.primary
                     Canvas(
@@ -442,49 +445,19 @@ fun VoiceScreen(
                 }
             }
 
-            // Status Text
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Clean status text
             Text(
                 text = voiceStateText,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier.padding(horizontal = 24.dp)
             )
 
-            // Mic Toggle Core Controller
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                IconButton(
-                    onClick = { isListening = !isListening },
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isListening) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
-                        )
-                ) {
-                    Icon(
-                        imageVector = if (isListening) Icons.Default.Mic else Icons.Default.MicOff,
-                        contentDescription = "Mute",
-                        tint = if (isListening) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-
-                Text(
-                    text = if (isListening) {
-                        if (isArabic) "نبيه يستمع الآن... انقر للتبديل" else "Nabih is listening... Tap to pause"
-                    } else {
-                        if (isArabic) "الميكروفون مغلق... انقر للتنشيط" else "Mic is off... Tap to activate"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                )
-            }
+            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }

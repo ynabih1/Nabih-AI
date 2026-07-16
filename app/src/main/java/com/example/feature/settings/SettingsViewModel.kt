@@ -40,8 +40,12 @@ class SettingsViewModel(
         }
     }
 
-    fun updateLoginState(isLoggedIn: Boolean, authType: String, userEmail: String, userName: String) {
-        settingsRepository.updateLoginState(isLoggedIn, authType, userEmail, userName)
+    suspend fun updatePassword(newPasswordHash: String): Boolean {
+        return settingsRepository.updatePassword(newPasswordHash)
+    }
+
+    fun updateLoginState(isLoggedIn: Boolean, authType: String, userEmail: String, userName: String, rememberMe: Boolean = false) {
+        settingsRepository.updateLoginState(isLoggedIn, authType, userEmail, userName, rememberMe)
     }
 
     suspend fun getUserByEmail(email: String): com.example.core.database.UserAccount? {
@@ -80,6 +84,14 @@ class SettingsViewModel(
         settingsRepository.updateDefaultModel(model)
     }
 
+    fun getExtraApiKey(keyName: String): String {
+        return settingsRepository.getExtraApiKey(keyName)
+    }
+
+    fun saveExtraApiKey(keyName: String, value: String) {
+        settingsRepository.saveExtraApiKey(keyName, value)
+    }
+
     fun updateVoiceEnabled(enabled: Boolean) {
         settingsRepository.updateVoiceEnabled(enabled)
     }
@@ -108,25 +120,13 @@ class SettingsViewModel(
         nabih: String,
         google: String,
         openai: String,
-        anthropic: String,
-        grok: String = "",
-        deepseek: String = "",
-        mistral: String = "",
-        openRouter: String = "",
-        ollama: String = "",
-        lmStudio: String = ""
+        anthropic: String
     ) {
         settingsRepository.updateApiKeys(
             nabih.trim(),
             google.trim(),
             openai.trim(),
-            anthropic.trim(),
-            grok.trim(),
-            deepseek.trim(),
-            mistral.trim(),
-            openRouter.trim(),
-            ollama.trim(),
-            lmStudio.trim()
+            anthropic.trim()
         )
     }
 
@@ -237,24 +237,12 @@ class SettingsViewModel(
         google: String,
         openai: String,
         anthropic: String,
-        grok: String = "",
-        deepseek: String = "",
-        mistral: String = "",
-        openRouter: String = "",
-        ollama: String = "",
-        lmStudio: String = "",
         isArabic: Boolean
     ): Pair<Boolean, String> {
         val trimmedGoogle = google.trim()
         val trimmedNabih = nabih.trim()
         val trimmedOpenai = openai.trim()
         val trimmedAnthropic = anthropic.trim()
-        val trimmedGrok = grok.trim()
-        val trimmedDeepseek = deepseek.trim()
-        val trimmedMistral = mistral.trim()
-        val trimmedOpenRouter = openRouter.trim()
-        val trimmedOllama = ollama.trim()
-        val trimmedLmStudio = lmStudio.trim()
 
         val results = mutableListOf<ValidationResult>()
 
@@ -339,13 +327,7 @@ class SettingsViewModel(
             trimmedNabih,
             trimmedGoogle,
             trimmedOpenai,
-            trimmedAnthropic,
-            trimmedGrok,
-            trimmedDeepseek,
-            trimmedMistral,
-            trimmedOpenRouter,
-            trimmedOllama,
-            trimmedLmStudio
+            trimmedAnthropic
         )
 
         // Compile feedback messages
