@@ -281,6 +281,14 @@ class SettingsRepository(context: Context) {
         secureStorage.saveKey(keyName, value)
     }
 
+    fun getLastActiveConversationId(): String? {
+        return prefs.getString("last_active_conversation_id", null)
+    }
+
+    fun saveLastActiveConversationId(id: String?) {
+        prefs.edit().putString("last_active_conversation_id", id).apply()
+    }
+
     private val userAccountDao by lazy {
         com.example.core.database.AppDatabase.getDatabase(context).userAccountDao()
     }

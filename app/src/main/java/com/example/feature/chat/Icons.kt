@@ -1,16 +1,47 @@
-package com.example.feature.chat
+package com.example.core.ui.icon
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.res.painterResource
+import com.example.core.model.ApiProvider
+import com.example.R
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.ColorFilter
+
+@Composable
+fun ProviderIcon(
+    provider: ApiProvider,
+    modifier: Modifier = Modifier,
+    color: Color? = null
+) {
+    Box(
+        modifier = modifier
+            .background(Color.Transparent, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        when (provider) {
+            ApiProvider.GOOGLE -> GeminiIcon(modifier = Modifier.matchParentSize())
+            ApiProvider.OPENAI -> OpenAiIcon(modifier = Modifier.matchParentSize(), color = color ?: Color(0xFF10A37F))
+            ApiProvider.ANTHROPIC -> ClaudeIcon(modifier = Modifier.matchParentSize(), color = color ?: Color(0xFFD97753))
+            ApiProvider.NABIH -> NabihIcon(modifier = Modifier.matchParentSize())
+        }
+    }
+}
 
 @Composable
 fun GeminiIcon(modifier: Modifier = Modifier) {
@@ -36,29 +67,12 @@ fun GeminiIcon(modifier: Modifier = Modifier) {
 
 @Composable
 fun OpenAiIcon(modifier: Modifier = Modifier, color: Color = Color(0xFF10A37F)) {
-    Canvas(modifier = modifier) {
-        val width = size.width
-        val scaleValue = width / 100f
-        
-        scale(scaleValue, scaleValue, pivot = Offset.Zero) {
-            val strokeWidth = 6.0f
-            for (i in 0 until 6) {
-                rotate(i * 60f, pivot = Offset(50f, 50f)) {
-                    val path = Path().apply {
-                        moveTo(50f, 42f)
-                        cubicTo(50f, 28f, 62f, 22f, 72f, 30f)
-                        cubicTo(82f, 38f, 80f, 54f, 68f, 62f)
-                        lineTo(54f, 70f)
-                    }
-                    drawPath(
-                        path = path,
-                        color = color,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                    )
-                }
-            }
-        }
-    }
+    Image(
+        painter = painterResource(id = R.drawable.ic_openai),
+        contentDescription = "OpenAI",
+        modifier = modifier,
+        colorFilter = ColorFilter.tint(color)
+    )
 }
 
 @Composable
@@ -78,9 +92,9 @@ fun ClaudeIcon(modifier: Modifier = Modifier, color: Color = Color(0xFFD97753)) 
                         val length = lobeLengths[i]
                         val w = lobeWidths[i]
                         moveTo(50f - w/2f, 50f)
-                        quadraticBezierTo(50f - w, 50f - length * 0.4f, 50f - w * 0.3f, 50f - length)
-                        quadraticBezierTo(50f, 50f - length - 4f, 50f + w * 0.3f, 50f - length)
-                        quadraticBezierTo(50f + w, 50f - length * 0.4f, 50f + w/2f, 50f)
+                        quadraticTo(50f - w, 50f - length * 0.4f, 50f - w * 0.3f, 50f - length)
+                        quadraticTo(50f, 50f - length - 4f, 50f + w * 0.3f, 50f - length)
+                        quadraticTo(50f + w, 50f - length * 0.4f, 50f + w/2f, 50f)
                         close()
                     }
                     drawPath(
@@ -92,9 +106,18 @@ fun ClaudeIcon(modifier: Modifier = Modifier, color: Color = Color(0xFFD97753)) 
             
             drawCircle(
                 color = color,
-                radius = 14f,
+                radius = 16f,
                 center = Offset(50f, 50f)
             )
         }
     }
+}
+
+@Composable
+fun NabihIcon(modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(id = R.drawable.logo),
+        contentDescription = "Nabih AI",
+        modifier = modifier
+    )
 }

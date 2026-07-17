@@ -10,7 +10,6 @@ import com.example.feature.auth.LoginScreen
 import com.example.feature.chat.ChatViewModel
 import com.example.feature.chat.HomeViewModel
 import com.example.feature.chat.MainScreen
-import com.example.feature.chat.VoiceScreen
 import com.example.feature.settings.SettingsScreen
 import com.example.feature.settings.SettingsViewModel
 import com.example.feature.tools.FilesScreen
@@ -24,6 +23,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
             // Dynamically provide Language Alignment (RTL / LTR) across all layouts
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                 NabihTheme(darkTheme = settings.theme == com.example.core.model.AppTheme.DARK) {
-                    Surface(modifier = Modifier.fillMaxSize()) {
+                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                         val navController = rememberNavController()
 
                         NavHost(
@@ -95,9 +95,6 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToSettings = {
                                         navController.navigate("settings")
                                     },
-                                    onNavigateToVoice = {
-                                        navController.navigate("voice")
-                                    },
                                     onNavigateToRoute = {
                                         navController.navigate(it)
                                     }
@@ -114,17 +111,6 @@ class MainActivity : ComponentActivity() {
                                         }
                                     },
 
-                                    onNavigateBack = {
-                                        navController.popBackStack()
-                                    }
-                                )
-                            }
-
-                            // Immersive Voice Call Mode
-                            composable("voice") {
-                                VoiceScreen(
-                                    settingsViewModel = settingsViewModel,
-                                    chatViewModel = chatViewModel,
                                     onNavigateBack = {
                                         navController.popBackStack()
                                     }

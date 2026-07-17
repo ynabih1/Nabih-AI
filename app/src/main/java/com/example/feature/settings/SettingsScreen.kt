@@ -3,6 +3,8 @@ package com.example.feature.settings
 import com.example.core.model.AppLanguage
 import com.example.core.model.AppSettings
 import com.example.core.model.AppTheme
+import com.example.core.model.ApiProvider
+import com.example.core.ui.icon.ProviderIcon
 
 import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.clip
@@ -34,6 +36,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,8 +52,10 @@ fun SettingsScreen(
     val context = LocalContext.current
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
     val isArabic = settings.language == AppLanguage.ARABIC
+    val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(if (isArabic) "الإعدادات" else "Settings", fontWeight = FontWeight.Bold) },
@@ -75,13 +80,7 @@ fun SettingsScreen(
             contentPadding = PaddingValues(top = 16.dp, bottom = 48.dp)
         ) {
             item {
-                AiConfigurationSection(settings, settingsViewModel, isArabic)
-            }
-            item {
-                AppearanceSection(settings, settingsViewModel, isArabic)
-            }
-            item {
-                LanguageSection(settings, settingsViewModel, isArabic)
+                AiConfigurationSection(settings, settingsViewModel, isArabic, snackbarHostState)
             }
             item {
                 StorageSettingsSection(isArabic, onClearChatHistory)
@@ -125,177 +124,256 @@ fun SettingsSectionCard(
 }
 
 @Composable
-fun AiConfigurationSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic: Boolean) {
+fun AiConfigurationSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic: Boolean, snackbarHostState: SnackbarHostState) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     
+    // Light theme enforced colors for ultra-minimal design
+    val primaryBlue = MaterialTheme.colorScheme.primary
+    val cardWhite = MaterialTheme.colorScheme.surface
+    val backgroundGray = MaterialTheme.colorScheme.background
+    val connectedGreen = Color(0xFF34A853)
+    val notConnectedGray = Color(0xFF9AA0A6)
+    val textDark = MaterialTheme.colorScheme.onSurface
+    val borderLight = MaterialTheme.colorScheme.surfaceVariant
+    
     var nabihKey by remember { mutableStateOf(settings.nabihApiKey) }
-    var googleKey by remember { mutableStateOf(settings.googleApiKey) }
     var openaiKey by remember { mutableStateOf(settings.openaiApiKey) }
     var anthropicKey by remember { mutableStateOf(settings.anthropicApiKey) }
+    var googleKey by remember { mutableStateOf(settings.googleApiKey) }
 
-    val activeModelId = settings.defaultModel.id
+    val providersList = listOf(
+        Triple("nabih", "Nabih Ultra", nabihKey),
+        Triple("openai", "ChatGPT", openaiKey),
+        Triple("claude", "Claude", anthropicKey),
+        Triple("google", "Gemini", googleKey)
+    )
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(backgroundGray, RoundedCornerShape(20.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = if (isArabic) "نماذج الذكاء الاصطناعي" else "AI Models",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        val providersList = listOf(
-            Triple("nabih", "Nabih Ultra", nabihKey),
-            Triple("openai", "ChatGPT", openaiKey),
-            Triple("claude", "Claude", anthropicKey),
-            Triple("google", "Gemini", googleKey)
-        )
-
         providersList.forEach { (id, name, savedKey) ->
-            val isActive = (id == "nabih" && activeModelId == com.example.core.model.AiModel.NABIH_ULTRA.id) ||
-                    (id == "google" && activeModelId == com.example.core.model.AiModel.GEMINI.id) ||
-                    (id == "openai" && activeModelId == com.example.core.model.AiModel.CHATGPT.id) ||
-                    (id == "claude" && activeModelId == com.example.core.model.AiModel.CLAUDE.id)
-
             var tempKey by remember(savedKey) { mutableStateOf(savedKey) }
-            var isTesting by remember { mutableStateOf(false) }
-            var testStatus by remember { mutableStateOf<Boolean?>(null) } 
+            var isVerifying by remember { mutableStateOf(false) }
+            var isVerified by remember { mutableStateOf(false) }
+            var isKeyVisible by remember { mutableStateOf(false) }
+            
+            val status = when {
+                isVerifying -> if (isArabic) "جاري التحقق..." else "Verifying..."
+                isVerified || savedKey.isNotEmpty() -> if (isArabic) "متصل" else "Connected"
+                else -> if (isArabic) "غير متصل" else "Not Connected"
+            }
+            val statusColor = when {
+                isVerifying -> primaryBlue
+                isVerified || savedKey.isNotEmpty() -> connectedGreen
+                else -> notConnectedGray
+            }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White, RoundedCornerShape(12.dp))
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = cardWhite),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-
-                    if (isActive) {
-                        Text(
-                            text = if (isArabic) "النموذج الافتراضي" else "Default Model",
-                            color = Color(0xFF10A37F),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else if (id == "nabih" || savedKey.isNotEmpty()) {
-                        TextButton(
-                            onClick = {
-                                val targetModel = when (id) {
-                                    "nabih" -> com.example.core.model.AiModel.NABIH_ULTRA
-                                    "google" -> com.example.core.model.AiModel.GEMINI
-                                    "openai" -> com.example.core.model.AiModel.CHATGPT
-                                    "claude" -> com.example.core.model.AiModel.CLAUDE
-                                    else -> com.example.core.model.AiModel.NABIH_ULTRA
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = name,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textDark
+                            )
+                            if (id == "nabih") {
+                                Surface(
+                                    color = primaryBlue.copy(alpha = 0.1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = if (isArabic) "الافتراضي" else "Default",
+                                        color = primaryBlue,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
                                 }
-                                viewModel.updateDefaultModel(targetModel)
-                            },
-                            contentPadding = PaddingValues(0.dp)
+                            }
+                        }
+                        
+                        Surface(
+                            color = statusColor.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text(if (isArabic) "تعيين كافتراضي" else "Set as Default", color = Color(0xFF10A37F))
+                            Text(
+                                text = status,
+                                color = statusColor,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
                         }
                     }
-                }
-
-                if (id != "nabih") {
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
                     OutlinedTextField(
                         value = tempKey,
-                        onValueChange = { tempKey = it; testStatus = null },
-                        placeholder = { Text(if (isArabic) "أدخل مفتاح الـ API" else "Enter API Key", color = Color.Gray) },
+                        onValueChange = { 
+                            tempKey = it
+                            isVerified = false
+                        },
                         singleLine = true,
-                        shape = RoundedCornerShape(8.dp),
-                        visualTransformation = PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(12.dp),
+                        visualTransformation = if (isKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { isKeyVisible = !isKeyVisible }) {
+                                Icon(
+                                    imageVector = if (isKeyVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
+                                    contentDescription = null,
+                                    tint = notConnectedGray
+                                )
+                            }
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color.White,
-                            unfocusedContainerColor = Color.White,
-                            focusedBorderColor = Color.Black,
-                            unfocusedBorderColor = Color.LightGray
+                            focusedContainerColor = cardWhite,
+                            unfocusedContainerColor = cardWhite,
+                            focusedBorderColor = primaryBlue,
+                            unfocusedBorderColor = borderLight,
+                            focusedTextColor = textDark,
+                            unfocusedTextColor = textDark
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
-
-                    if (testStatus != null) {
-                        Text(
-                            text = if (testStatus == true) {
-                                if (isArabic) "API Key يعمل بشكل صحيح" else "API Key works correctly"
-                            } else {
-                                if (isArabic) "API Key غير صالح، يرجى التحقق من المفتاح" else "Invalid API Key, please check your key"
-                            },
-                            color = if (testStatus == true) Color(0xFF10A37F) else Color.Red,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    } else if (savedKey.isNotEmpty()) {
-                        Text(
-                            text = if (isArabic) "آخر حالة: متصل ومحفوظ" else "Last status: Connected and saved",
-                            color = Color.Gray,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
                             onClick = {
                                 if (tempKey.isBlank()) return@Button
                                 coroutineScope.launch {
-                                    isTesting = true
-                                    testStatus = testApiKeyConnection(id, tempKey)
-                                    isTesting = false
+                                    isVerifying = true
+                                    val success = testApiKeyConnection(id, tempKey)
+                                    isVerifying = false
+                                    isVerified = success
+                                    if (success) {
+                                        snackbarHostState.showSnackbar(
+                                            message = if (isArabic) "تم التحقق بنجاح" else "Verification successful",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    } else {
+                                        snackbarHostState.showSnackbar(
+                                            message = if (isArabic) "فشل التحقق من المفتاح" else "API Key verification failed",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                    }
                                 }
                             },
-                            enabled = !isTesting && tempKey.isNotBlank(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray),
-                            shape = RoundedCornerShape(8.dp),
+                            enabled = !isVerifying && tempKey.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                contentColor = primaryBlue,
+                                disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f).copy(alpha = 0.5f),
+                                disabledContentColor = primaryBlue.copy(alpha = 0.5f)
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(0.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            if (isTesting) {
-                                CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            if (isVerifying) {
+                                CircularProgressIndicator(
+                                    color = primaryBlue,
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
                             } else {
-                                Text(if (isArabic) "اختبار الاتصال" else "Test Connection")
+                                Text(if (isArabic) "تحقق" else "Verify", fontWeight = FontWeight.SemiBold)
                             }
                         }
-
+                        
                         Button(
                             onClick = {
                                 coroutineScope.launch {
                                     when (id) {
+                                        "nabih" -> { nabihKey = tempKey; viewModel.saveApiKeys(tempKey, googleKey, openaiKey, anthropicKey) }
                                         "google" -> { googleKey = tempKey; viewModel.saveApiKeys(nabihKey, tempKey, openaiKey, anthropicKey) }
                                         "openai" -> { openaiKey = tempKey; viewModel.saveApiKeys(nabihKey, googleKey, tempKey, anthropicKey) }
                                         "claude" -> { anthropicKey = tempKey; viewModel.saveApiKeys(nabihKey, googleKey, openaiKey, tempKey) }
                                     }
-                                    com.example.core.model.ModelRegistry.syncAndRefresh(context)
-                                    Toast.makeText(context, if (isArabic) "تم الحفظ" else "Saved", Toast.LENGTH_SHORT).show()
-                                    testStatus = null
+                                    snackbarHostState.showSnackbar(
+                                        message = if (isArabic) "تم حفظ المفتاح" else "Key saved securely",
+                                        duration = SnackbarDuration.Short
+                                    )
                                 }
                             },
-                            enabled = testStatus == true,
+                            enabled = isVerified,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (testStatus == true) Color.Black else Color.LightGray, 
-                                contentColor = Color.White
+                                containerColor = primaryBlue,
+                                contentColor = cardWhite,
+                                disabledContainerColor = borderLight,
+                                disabledContentColor = notConnectedGray
                             ),
-                            shape = RoundedCornerShape(8.dp),
+                            elevation = ButtonDefaults.buttonElevation(0.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text(if (isArabic) "حفظ" else "Save")
+                            Text(if (isArabic) "حفظ" else "Save", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
+            }
+        }
+        
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = { 
+                    nabihKey = settings.nabihApiKey
+                    googleKey = settings.googleApiKey
+                    openaiKey = settings.openaiApiKey
+                    anthropicKey = settings.anthropicApiKey
+                },
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, borderLight),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = textDark),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(if (isArabic) "إلغاء" else "Cancel", fontWeight = FontWeight.SemiBold)
+            }
+            
+            Button(
+                onClick = {
+                    coroutineScope.launch {
+                        viewModel.saveApiKeys(nabihKey, googleKey, openaiKey, anthropicKey)
+                        com.example.core.model.ModelRegistry.syncAndRefresh(context)
+                        snackbarHostState.showSnackbar(
+                            message = if (isArabic) "تم حفظ الكل" else "All keys saved",
+                            duration = SnackbarDuration.Short
+                        )
+                    }
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = primaryBlue,
+                    contentColor = cardWhite
+                ),
+                elevation = ButtonDefaults.buttonElevation(0.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(if (isArabic) "حفظ الكل" else "Save All", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -340,54 +418,7 @@ suspend fun testApiKeyConnection(provider: String, key: String): Boolean = kotli
     }
 }
 
-@Composable
-fun AppearanceSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic: Boolean) {
-    SettingsSectionCard(if (isArabic) "سمة التطبيق" else "Theme & Appearance", Icons.Rounded.Palette) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(if (isArabic) "اختر سمة الألوان المفضلة لديك:" else "Choose your preferred color theme:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                AppTheme.values().forEach { theme ->
-                    val label = when(theme) {
-                        AppTheme.LIGHT -> if (isArabic) "فاتح" else "Light"
-                        AppTheme.DARK -> if (isArabic) "داكن" else "Dark"
-                        AppTheme.SYSTEM -> if (isArabic) "النظام" else "System"
-                    }
-                    FilterChip(
-                        selected = settings.theme == theme,
-                        onClick = { viewModel.updateTheme(theme) },
-                        label = { Text(label, modifier = Modifier.padding(vertical = 4.dp)) },
-                        modifier = Modifier.weight(1f).minimumInteractiveComponentSize()
-                    )
-                }
-            }
-        }
-    }
-}
 
-@Composable
-fun LanguageSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic: Boolean) {
-    SettingsSectionCard(if (isArabic) "اللغة المعتمدة" else "System Language", Icons.Rounded.Language) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(if (isArabic) "تغيير لغة واجهة المستخدم المعتمدة:" else "Change active language of user interface:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                AppLanguage.values().forEach { language ->
-                    FilterChip(
-                        selected = settings.language == language,
-                        onClick = { viewModel.updateLanguage(language) },
-                        label = { Text(language.displayName, modifier = Modifier.padding(vertical = 4.dp)) },
-                        modifier = Modifier.weight(1f).minimumInteractiveComponentSize()
-                    )
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun StorageSettingsSection(isArabic: Boolean, onClearChatHistory: () -> Unit) {

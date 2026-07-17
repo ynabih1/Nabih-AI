@@ -101,9 +101,22 @@ class ChatViewModel(
     private var activeConversationMessagesFlow: Job? = null
     private var streamingJob: Job? = null
 
+    init {
+        val lastConvId = settingsRepository.getLastActiveConversationId()
+        if (lastConvId != null) {
+            viewModelScope.launch {
+                val conv = chatRepository.getConversationById(lastConvId)
+                if (conv != null) {
+                    selectConversation(lastConvId)
+                }
+            }
+        }
+    }
+
 
     fun createNewChat(modelId: String) {
         _activeConversationId.value = null
+        settingsRepository.saveLastActiveConversationId(null)
         activeConversationMessagesFlow?.cancel()
         _uiState.value = ChatUiState.Idle
         _currentStreamingResponse.value = ""
@@ -115,6 +128,7 @@ class ChatViewModel(
 
     fun selectConversation(id: String) {
         _activeConversationId.value = id
+        settingsRepository.saveLastActiveConversationId(id)
         activeConversationMessagesFlow?.cancel()
         _uiState.value = ChatUiState.Loading
 

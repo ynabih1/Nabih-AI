@@ -31,7 +31,8 @@ fun MarkdownRenderer(
     text: String,
     modifier: Modifier = Modifier
 ) {
-    val blocks = parseMarkdownBlocks(text)
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val blocks = parseMarkdownBlocks(text, primaryColor)
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         blocks.forEach { block ->
@@ -59,7 +60,7 @@ sealed interface MarkdownBlock {
     data class CodeBlock(val code: String, val language: String) : MarkdownBlock
 }
 
-private fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
+private fun parseMarkdownBlocks(text: String, primaryColor: Color): List<MarkdownBlock> {
     val parts = text.split("```")
     val blocks = mutableListOf<MarkdownBlock>()
 
@@ -78,14 +79,14 @@ private fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
         } else {
             // Standard text blocks - parse simple markdown (bold, lists, headers)
             if (part.isNotBlank()) {
-                blocks.add(MarkdownBlock.TextBlock(renderRichText(part)))
+                blocks.add(MarkdownBlock.TextBlock(renderRichText(part, primaryColor)))
             }
         }
     }
     return blocks
 }
 
-private fun renderRichText(part: String): AnnotatedString {
+private fun renderRichText(part: String, primaryColor: Color): AnnotatedString {
     return buildAnnotatedString {
         val lines = part.lines()
         lines.forEachIndexed { index, line ->
@@ -105,7 +106,7 @@ private fun renderRichText(part: String): AnnotatedString {
                     SpanStyle(
                         fontWeight = FontWeight.Bold,
                         fontSize = fontSize,
-                        color = Color(0xFF1A73E8)
+                        color = primaryColor
                     )
                 ) {
                     append(headerText)
@@ -166,38 +167,45 @@ fun CodeBlockLayout(
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
+    
+    val codeBgColor = Color(0xFF1E1E2E)
+    val headerBgColor = Color(0xFF151521)
+    val textColor = Color(0xFFCDD6F4)
+    val accentColor = Color(0xFF89B4FA)
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clip(RoundedCornerShape(12.dp))
+            .background(codeBgColor)
     ) {
         // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .background(headerBgColor)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = language.uppercase(),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = language.lowercase().replaceFirstChar { it.uppercase() },
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = accentColor,
+                fontFamily = FontFamily.Monospace
             )
             IconButton(
                 onClick = {
                     clipboardManager.setText(AnnotatedString(code))
-                    Toast.makeText(context, "Code copied to clipboard", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, if (context.resources.configuration.locales[0].language == "ar") "تم نسخ الكود البرمجي" else "Code copied to clipboard", Toast.LENGTH_SHORT).show()
                 },
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(32.dp)
             ) {
                 Icon(
                     imageVector = Icons.Rounded.ContentCopy,
                     contentDescription = "Copy code",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = Color(0xFFA6ADC8),
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -208,14 +216,14 @@ fun CodeBlockLayout(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(12.dp)
+                .padding(16.dp)
         ) {
             Text(
                 text = code,
                 fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 18.sp
+                fontSize = 13.5.sp,
+                color = textColor,
+                lineHeight = 20.sp
             )
         }
     }

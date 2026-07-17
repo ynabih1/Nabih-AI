@@ -96,7 +96,6 @@ fun LoginScreen(
     var emailInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
     var nameInput by remember { mutableStateOf("") }
-    var confirmPasswordInput by remember { mutableStateOf("") }
     
     // Remember Me
     var rememberMe by remember { mutableStateOf(true) }
@@ -111,7 +110,6 @@ fun LoginScreen(
     // Security / Visibility
     var passwordVisible by remember { mutableStateOf(false) }
     var newPasswordVisible by remember { mutableStateOf(false) }
-    var termsAccepted by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
 
     // Onboarding items
@@ -174,12 +172,7 @@ fun LoginScreen(
                     modifier = Modifier.size(80.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.logo),
-                        contentDescription = "Logo",
-                        tint = Color.Unspecified,
-                        modifier = Modifier.size(72.dp)
-                    )
+                    Icon(painter = painterResource(id = R.drawable.logo), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(72.dp))
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
@@ -558,36 +551,6 @@ fun LoginScreen(
                                     }
                                 }
 
-                                OutlinedTextField(
-                                    value = confirmPasswordInput,
-                                    onValueChange = { confirmPasswordInput = it },
-                                    label = { Text(if (isArabic) "تأكيد كلمة المرور" else "Confirm Password") },
-                                    leadingIcon = { Icon(Icons.Rounded.Lock, null, tint = MaterialTheme.colorScheme.primary) },
-                                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                // Terms and Privacy acceptance row
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { termsAccepted = !termsAccepted },
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = termsAccepted,
-                                        onCheckedChange = { termsAccepted = it }
-                                    )
-                                    Text(
-                                        text = if (isArabic) "أوافق على شروط الخدمة وسياسة الخصوصية" else "I accept the Terms & Privacy Policy",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
-                                    )
-                                }
-
                                 Spacer(modifier = Modifier.height(8.dp))
 
                                 Button(
@@ -599,10 +562,6 @@ fun LoginScreen(
                                             Toast.makeText(context, if (isArabic) "يرجى إدخال عنوان بريد إلكتروني صحيح." else "Please enter a valid email address.", Toast.LENGTH_LONG).show()
                                         } else if (passwordInput.length < 6) {
                                             Toast.makeText(context, if (isArabic) "يجب أن تكون كلمة المرور 6 أحرف على الأقل." else "Password must be at least 6 characters.", Toast.LENGTH_LONG).show()
-                                        } else if (passwordInput != confirmPasswordInput) {
-                                            Toast.makeText(context, if (isArabic) "كلمات المرور غير متطابقة." else "Passwords do not match.", Toast.LENGTH_LONG).show()
-                                        } else if (!termsAccepted) {
-                                            Toast.makeText(context, if (isArabic) "يرجى الموافقة على الشروط أولاً." else "Please accept the Terms & Privacy Policy first.", Toast.LENGTH_SHORT).show()
                                         } else {
                                             scope.launch {
                                                 isLoading = true
