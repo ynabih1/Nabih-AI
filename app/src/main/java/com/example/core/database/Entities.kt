@@ -59,4 +59,12 @@ data class AttachmentItem(
     val timestamp: Long
 )
 
+@Entity(tableName = "error_logs")
+data class ErrorLog(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val errorType: String,
+    val provider: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 

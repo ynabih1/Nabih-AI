@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
                     com.example.core.model.AppTheme.LIGHT -> false
                     com.example.core.model.AppTheme.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
                 }
-                NabihTheme(darkTheme = darkTheme) {
+                NabihTheme(darkTheme = darkTheme, isArabic = settings.language == AppLanguage.ARABIC) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                         val navController = rememberNavController()
 

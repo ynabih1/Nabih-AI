@@ -10,6 +10,7 @@ import com.example.core.model.ResponseStyle
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.tasks.await
 
 class SettingsRepository(context: Context) {
     companion object {
@@ -28,13 +29,20 @@ class SettingsRepository(context: Context) {
         val fontStr = prefs.getString("font_size", FontSize.MEDIUM.name) ?: FontSize.MEDIUM.name
         val modelStr = prefs.getString("default_model", AiModel.NABIH_ULTRA.name) ?: AiModel.NABIH_ULTRA.name
         
-        var userName = prefs.getString("user_name", "") ?: ""
+        val firebaseUser = try {
+            com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        } catch (e: Exception) {
+            null
+        }
+        val isLoggedInCalculated = firebaseUser != null
+
+        var userName = firebaseUser?.displayName ?: prefs.getString("user_name", "") ?: ""
         if (userName == "Nabih User" || userName == "Nabih Microsoft User" || userName == "Guest User" || userName == "Nabih Core User" || userName == "Secured Passkey Session") {
             userName = ""
             prefs.edit().putString("user_name", userName).apply()
         }
         
-        var userEmail = prefs.getString("user_email", "") ?: ""
+        var userEmail = firebaseUser?.email ?: prefs.getString("user_email", "") ?: ""
         if (userEmail == "guest@nabih.ai") {
             userEmail = ""
             prefs.edit().putString("user_email", userEmail).apply()
@@ -53,13 +61,6 @@ class SettingsRepository(context: Context) {
         }
 
         val rememberMe = prefs.getBoolean("remember_me", false)
-        var isLoggedInCalculated = prefs.getBoolean("is_logged_in", false)
-        if (isLoggedInCalculated && !rememberMe) {
-            if (isFirstLoad) {
-                isLoggedInCalculated = false
-                prefs.edit().putBoolean("is_logged_in", false).apply()
-            }
-        }
         isFirstLoad = false
 
         return AppSettings(
@@ -87,7 +88,9 @@ class SettingsRepository(context: Context) {
             memoryEnabled = prefs.getBoolean("memory_enabled", true),
             saveHistory = prefs.getBoolean("save_history", true),
             notificationsEnabled = prefs.getBoolean("notifications_enabled", true),
-            completionNotifications = prefs.getBoolean("completion_notifications", true)
+            completionNotifications = prefs.getBoolean("completion_notifications", true),
+            remindersEnabled = prefs.getBoolean("reminders_enabled", true),
+            onboardingCompleted = prefs.getBoolean("onboarding_completed", false)
         )
     }
 
@@ -161,6 +164,11 @@ class SettingsRepository(context: Context) {
     }
 
     fun logout() {
+        try {
+            com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+        } catch (e: Exception) {
+            // ignore
+        }
         prefs.edit()
             .putBoolean("is_logged_in", false)
             .putString("auth_type", "")
@@ -184,6 +192,18 @@ class SettingsRepository(context: Context) {
             .putString("personal_info", info.trim())
             .putString("user_handle", handle.trim())
             .apply()
+            
+        try {
+            val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+            if (firebaseUser != null) {
+                val profileUpdates = com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                    .setDisplayName(name.trim())
+                    .build()
+                firebaseUser.updateProfile(profileUpdates).await()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SettingsRepository", "Failed to update Firebase display name", e)
+        }
             
         if (newEmail.isNotBlank() && oldEmail.isNotBlank() && oldEmail.lowercase() != newEmail.lowercase()) {
             val trimmedNewEmail = newEmail.trim().lowercase()
@@ -258,8 +278,17 @@ class SettingsRepository(context: Context) {
         prefs.edit().putBoolean("completion_notifications", enabled).apply()
         _settings.value = loadSettings()
     }
+    fun updateRemindersEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("reminders_enabled", enabled).apply()
+        _settings.value = loadSettings()
+    }
     fun updateHapticFeedback(enabled: Boolean) {
         prefs.edit().putBoolean("haptic_feedback", enabled).apply()
+        _settings.value = loadSettings()
+    }
+
+    fun updateOnboardingCompleted(completed: Boolean) {
+        prefs.edit().putBoolean("onboarding_completed", completed).apply()
         _settings.value = loadSettings()
     }
 

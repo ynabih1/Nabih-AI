@@ -6,8 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [Folder::class, Conversation::class, Message::class, MemoryItem::class, UserAccount::class],
-    version = 2,
+    entities = [Folder::class, Conversation::class, Message::class, MemoryItem::class, UserAccount::class, ErrorLog::class],
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -16,6 +16,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
     abstract fun memoryDao(): MemoryDao
     abstract fun userAccountDao(): UserAccountDao
+    abstract fun errorLogDao(): ErrorLogDao
 
     companion object {
         @Volatile

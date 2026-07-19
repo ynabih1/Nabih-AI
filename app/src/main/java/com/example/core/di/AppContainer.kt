@@ -7,15 +7,22 @@ import com.example.feature.settings.SettingsRepository
 
 import android.content.Context
 
+import com.example.core.utils.NetworkMonitor
+
 interface AppContainer {
     val settingsRepository: SettingsRepository
     val memoryRepository: MemoryRepository
     val chatRepository: ChatRepository
+    val networkMonitor: NetworkMonitor
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
     private val database: AppDatabase by lazy {
         AppDatabase.getDatabase(context)
+    }
+
+    override val networkMonitor: NetworkMonitor by lazy {
+        NetworkMonitor(context)
     }
 
     override val settingsRepository: SettingsRepository by lazy {
@@ -33,6 +40,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             conversationDao = database.conversationDao(),
             messageDao = database.messageDao(),
             memoryDao = database.memoryDao(),
+            errorLogDao = database.errorLogDao(),
             settingsRepository = settingsRepository
         )
     }

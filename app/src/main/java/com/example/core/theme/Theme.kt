@@ -8,46 +8,51 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
 private val LightColorScheme = lightColorScheme(
-    primary = LightPrimary,
-    onPrimary = LightOnPrimary,
-    background = LightBackground,
-    onBackground = LightOnBackground,
-    surface = LightSurface,
-    onSurface = LightOnSurface,
-    outline = LightOutline,
-    outlineVariant = LightOutlineVariant,
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightOnSurfaceVariant,
-    surfaceContainer = Color(0xFFF1F1F2),
-    surfaceContainerLow = Color(0xFFF7F7F8),
-    surfaceContainerHigh = Color(0xFFE5E5E5)
+    primary = AccentPrimary,
+    onPrimary = Color.White,
+    background = BackgroundScreen,
+    onBackground = TextPrimary,
+    surface = BackgroundScreen,
+    onSurface = TextPrimary,
+    outline = BorderColor,
+    outlineVariant = BorderColor,
+    surfaceVariant = BackgroundChatBox,
+    onSurfaceVariant = TextSecondary,
+    surfaceContainer = BackgroundChatBox,
+    surfaceContainerLow = BackgroundScreen,
+    surfaceContainerLowest = BackgroundChatBox,
+    surfaceContainerHigh = BorderColor
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = DarkPrimary,
-    onPrimary = DarkOnPrimary,
-    background = DarkBackground,
-    onBackground = DarkOnBackground,
-    surface = DarkSurface,
-    onSurface = DarkOnSurface,
-    outline = DarkOutline,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = DarkOnSurfaceVariant,
-    surfaceContainer = Color(0xFF2D3748),
-    surfaceContainerLow = Color(0xFF1F2937),
-    surfaceContainerHigh = Color(0xFF4A5568)
+    primary = AccentPrimaryDark,
+    onPrimary = Color.White,
+    background = BackgroundScreenDark,
+    onBackground = TextPrimaryDark,
+    surface = BackgroundScreenDark,
+    onSurface = TextPrimaryDark,
+    outline = BorderColorDark,
+    outlineVariant = BorderColorDark,
+    surfaceVariant = BackgroundChatBoxDark,
+    onSurfaceVariant = TextSecondaryDark,
+    surfaceContainer = BackgroundChatBoxDark,
+    surfaceContainerLow = BackgroundScreenDark,
+    surfaceContainerLowest = BackgroundChatBoxDark,
+    surfaceContainerHigh = BorderColorDark
 )
 
 @Composable
 fun NabihTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    isArabic: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val typography = if (isArabic) PlexArabicTypography else InterTypography
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = typography,
         content = content
     )
 }

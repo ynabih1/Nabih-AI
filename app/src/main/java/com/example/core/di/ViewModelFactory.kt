@@ -21,7 +21,12 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
             }
             modelClass.isAssignableFrom(ChatViewModel::class.java) -> {
                 val savedStateHandle = extras.createSavedStateHandle()
-                ChatViewModel(savedStateHandle, container.chatRepository, container.settingsRepository) as T
+                ChatViewModel(
+                    savedStateHandle = savedStateHandle,
+                    chatRepository = container.chatRepository,
+                    settingsRepository = container.settingsRepository,
+                    networkMonitor = container.networkMonitor
+                ) as T
             }
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }

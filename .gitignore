@@ -25,6 +25,7 @@ captures/
 debug.keystore
 debug.keystore.base64
 local.properties
+# Private environment variables containing real keys (must NEVER be committed)
 .env
 .env.*
 !*.example

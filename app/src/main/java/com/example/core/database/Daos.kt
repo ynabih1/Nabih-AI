@@ -43,6 +43,9 @@ interface ConversationDao {
 
     @Query("DELETE FROM conversations")
     suspend fun deleteAllConversations()
+
+    @Query("SELECT * FROM conversations ORDER BY updatedAt DESC")
+    suspend fun getAllConversationsSync(): List<Conversation>
 }
 
 @Dao
@@ -114,5 +117,17 @@ interface UserAccountDao {
 
     @Query("UPDATE user_accounts SET passwordHash = :newPasswordHash WHERE email = :email")
     suspend fun updateUserPassword(email: String, newPasswordHash: String)
+}
+
+@Dao
+interface ErrorLogDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertErrorLog(errorLog: ErrorLog)
+
+    @Query("SELECT * FROM error_logs ORDER BY timestamp DESC")
+    fun getAllErrorLogs(): Flow<List<ErrorLog>>
+
+    @Query("DELETE FROM error_logs")
+    suspend fun clearAllErrorLogs()
 }
 

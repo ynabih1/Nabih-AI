@@ -3,9 +3,7 @@ package com.example.feature.chat
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 
-
-
-
+import com.example.core.theme.getChatBodyFontFamily
 import com.example.R
 
 import com.example.core.database.Conversation
@@ -401,6 +399,8 @@ fun MainScreen(
     val inputText by chatViewModel.currentInputText.collectAsStateWithLifecycle()
     val searchEnabled by chatViewModel.searchEnabled.collectAsStateWithLifecycle()
     val searchQuery by chatViewModel.searchQuery.collectAsStateWithLifecycle()
+    val isOnline by chatViewModel.isOnline.collectAsStateWithLifecycle()
+    val fallbackState by chatViewModel.fallbackDialogState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -483,7 +483,6 @@ fun MainScreen(
                             Icon(Icons.Rounded.Menu, contentDescription = "Menu")
                         }
                     },
-                    actions = {},
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         titleContentColor = MaterialTheme.colorScheme.onBackground
@@ -497,6 +496,35 @@ fun MainScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
+                AnimatedVisibility(
+                    visible = !isOnline,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.errorContainer)
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.WifiOff,
+                            contentDescription = "Offline",
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isArabic) "لا يوجد اتصال بالإنترنت" else "No internet connection",
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
                 if (searchEnabled) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -720,10 +748,51 @@ fun MainScreen(
                     onRemoveAttachment = {
                         chatViewModel.attachImage(null)
                         chatViewModel.attachDocument(null)
-                    }
+                    },
+                    selectedModel = selectedModel,
+                    onSelectModel = { chatViewModel.selectModel(it) },
+                    settings = settings,
+                    isOnline = isOnline
                 )
             }
         }
+    }
+
+    if (fallbackState.show) {
+        AlertDialog(
+            onDismissRequest = { chatViewModel.dismissFallback() },
+            title = {
+                Text(
+                    text = if (isArabic) "تبديل الموديل" else "Switch Model",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = if (isArabic) {
+                        "حدثت مشكلة مع ${fallbackState.failedModel.displayName}، هل تريد المتابعة مع ${fallbackState.suggestedModel.displayName}؟"
+                    } else {
+                        "A problem occurred with ${fallbackState.failedModel.displayName}. Do you want to continue with ${fallbackState.suggestedModel.displayName}?"
+                    },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { chatViewModel.acceptFallback() }
+                ) {
+                    Text(if (isArabic) "متابعة" else "Continue")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { chatViewModel.dismissFallback() }
+                ) {
+                    Text(if (isArabic) "إلغاء" else "Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -753,6 +822,7 @@ fun MarkdownText(content: String, isArabic: Boolean) {
     val segments = remember(content) { parseMarkdown(content) }
     val density = LocalDensity.current
     val context = LocalContext.current
+    val chatFontFamily = remember(content, isArabic) { getChatBodyFontFamily(content, isArabic) }
     
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         segments.forEach { segment ->
@@ -760,7 +830,7 @@ fun MarkdownText(content: String, isArabic: Boolean) {
                 is MarkdownSegment.TextBlock -> {
                     Text(
                         text = formatInlineMarkdown(segment.content, isArabic),
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontFamily = chatFontFamily),
                         lineHeight = 24.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -776,6 +846,7 @@ fun MarkdownText(content: String, isArabic: Boolean) {
                         text = formatInlineMarkdown(segment.content, isArabic),
                         fontSize = (style.fontSize.value * scaleFactor).sp,
                         fontWeight = FontWeight.Bold,
+                        fontFamily = chatFontFamily,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
                     )
@@ -1026,6 +1097,19 @@ fun MessageItem(
     var showEditDialog by remember { mutableStateOf(false) }
     var editMessageText by remember { mutableStateOf(message.content) }
 
+    val isErrorMsg = !isUser && (message.content.startsWith("An error occurred:") || 
+            message.content.startsWith("حدث خطأ:") || 
+            message.content.startsWith("API_ERROR:") || 
+            message.content.startsWith("Error:"))
+            
+    val cleanContent = remember(message.content) {
+        var text = message.content
+        if (text.startsWith("API_ERROR:")) {
+            text = text.substring("API_ERROR:".length).trim()
+        }
+        text
+    }
+
     if (showEditDialog) {
         androidx.compose.ui.window.Dialog(
             onDismissRequest = { showEditDialog = false },
@@ -1190,10 +1274,16 @@ fun MessageItem(
         ) {
             Surface(
                 shape = bubbleShape,
-                color = if (isUser) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface,
+                color = if (isUser) {
+                    MaterialTheme.colorScheme.surfaceContainer
+                } else if (isErrorMsg) {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
                 border = if (!isUser) androidx.compose.foundation.BorderStroke(
                     width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    color = if (isErrorMsg) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                 ) else null,
                 tonalElevation = if (!isUser) 1.dp else 0.dp,
                 modifier = Modifier
@@ -1258,32 +1348,58 @@ fun MessageItem(
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             } else {
-                                // Blinking cursor setup for streaming text
-                                val finalContent = if (isStreaming && message.content.isNotEmpty()) {
-                                    val infiniteTransition = rememberInfiniteTransition(label = "cursor")
-                                    val alpha by infiniteTransition.animateFloat(
-                                        initialValue = 0.2f,
-                                        targetValue = 1f,
-                                        animationSpec = infiniteRepeatable(
-                                            animation = tween(durationMillis = 400, easing = LinearEasing),
-                                            repeatMode = RepeatMode.Reverse
-                                        ),
-                                        label = "alpha"
-                                    )
-                                    message.content + " ▌"
+                                if (isErrorMsg) {
+                                    Row(
+                                        verticalAlignment = Alignment.Top,
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Info,
+                                            contentDescription = "Error",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            modifier = Modifier.size(20.dp).padding(top = 2.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = cleanContent,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            OutlinedButton(
+                                                onClick = onRetry,
+                                                shape = RoundedCornerShape(10.dp),
+                                                colors = ButtonDefaults.outlinedButtonColors(
+                                                    contentColor = MaterialTheme.colorScheme.primary
+                                                ),
+                                                modifier = Modifier.minimumInteractiveComponentSize()
+                                            ) {
+                                                Icon(Icons.Rounded.Refresh, contentDescription = "Retry", modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(if (isArabic) "إعادة المحاولة" else "Retry")
+                                            }
+                                        }
+                                    }
                                 } else {
-                                    message.content
-                                }
-                                
-                                MarkdownRenderer(text = finalContent)
-                            }
-                            
-                            if (message.content.startsWith("An error occurred:") || message.content.startsWith("حدث خطأ:")) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                OutlinedButton(onClick = onRetry, shape = RoundedCornerShape(10.dp), modifier = Modifier.minimumInteractiveComponentSize()) {
-                                    Icon(Icons.Rounded.Refresh, contentDescription = "Retry")
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(if (isArabic) "إعادة المحاولة" else "Retry")
+                                    // Blinking cursor setup for streaming text
+                                    val finalContent = if (isStreaming && message.content.isNotEmpty()) {
+                                        val infiniteTransition = rememberInfiniteTransition(label = "cursor")
+                                        val alpha by infiniteTransition.animateFloat(
+                                            initialValue = 0.2f,
+                                            targetValue = 1f,
+                                            animationSpec = infiniteRepeatable(
+                                                animation = tween(durationMillis = 400, easing = LinearEasing),
+                                                repeatMode = RepeatMode.Reverse
+                                            ),
+                                            label = "alpha"
+                                        )
+                                        message.content + " ▌"
+                                    } else {
+                                        message.content
+                                    }
+                                    
+                                    MarkdownRenderer(text = finalContent)
                                 }
                             }
                         }
@@ -1456,7 +1572,11 @@ fun BottomInputArea(
     attachError: String? = null,
     onAttachImage: (android.net.Uri?) -> Unit = {},
     onAttachDocument: (android.net.Uri?, String?) -> Unit = { _, _ -> },
-    onRemoveAttachment: () -> Unit = {}
+    onRemoveAttachment: () -> Unit = {},
+    selectedModel: com.example.core.model.AiModel,
+    onSelectModel: (com.example.core.model.AiModel) -> Unit,
+    settings: AppSettings,
+    isOnline: Boolean = true
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var showAttachmentMenu by remember { mutableStateOf(false) }
@@ -1546,403 +1666,454 @@ fun BottomInputArea(
         }
     }
 
-    Surface(
-        color = MaterialTheme.colorScheme.background,
-        shadowElevation = 0.dp
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 8.dp)
     ) {
-        Column(
+        // Floating outer surface for the Claude-style input box
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .animateContentSize(),
+            shape = RoundedCornerShape(24.dp),
+            color = if (isFocused) MaterialTheme.colorScheme.surfaceContainerLowest else MaterialTheme.colorScheme.surfaceContainer,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            shadowElevation = if (isFocused) 2.dp else 0.dp
         ) {
-            // Elegant Premium ChatGPT-style capsule layout
-Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(32.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                border = if (isFocused) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                shadowElevation = if (isFocused) 4.dp else 0.dp
+            Column(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    // 1. Error Display Area inside Card
-                    if (attachError != null) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.errorContainer)
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                Icon(Icons.Rounded.ErrorOutline, contentDescription = "Error", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = attachError,
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            IconButton(onClick = onRemoveAttachment, modifier = Modifier.size(24.dp)) {
-                                Icon(Icons.Rounded.Close, contentDescription = "Clear", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    }
-
-                    // 2. Beautiful Attachment Row inside Card
-                    if (attachedImageUri != null || attachedDocUri != null) {
-                        androidx.compose.foundation.lazy.LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            if (attachedImageUri != null) {
-                                item {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(80.dp)
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    ) {
-                                        AsyncImage(
-                                            model = attachedImageUri,
-                                            contentDescription = "Image preview",
-                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-
-                                        // Image size overlay
-                                        val sizeStr = getUriSizeFormatted(context, attachedImageUri)
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .align(Alignment.BottomCenter)
-                                                .background(
-                                                    androidx.compose.ui.graphics.Brush.verticalGradient(
-                                                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))
-                                                    )
-                                                )
-                                                .padding(vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = sizeStr,
-                                                color = Color(0xFFFAFAFA),
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.align(Alignment.Center)
-                                            )
-                                        }
-
-                                        // Upload progress overlay
-                                        if (isAttaching) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .background(Color.Black.copy(alpha = 0.4f)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                CircularProgressIndicator(
-                                                    progress = attachProgress,
-                                                    modifier = Modifier.size(24.dp),
-                                                    strokeWidth = 2.dp,
-                                                    color = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                        }
-
-                                        // Close Button
-                                        IconButton(
-                                            onClick = onRemoveAttachment,
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .padding(4.dp)
-                                                .size(20.dp)
-                                                .clip(CircleShape)
-                                                .background(Color.Black.copy(alpha = 0.5f))
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Close,
-                                                contentDescription = "Remove",
-                                                tint = Color(0xFFFAFAFA),
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (attachedDocUri != null) {
-                                item {
-                                    Box(
-                                        modifier = Modifier
-                                            .height(80.dp)
-                                            .widthIn(min = 140.dp, max = 200.dp)
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                                            .padding(8.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxSize(),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(36.dp)
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Description,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = attachedDocName ?: "Document",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    fontWeight = FontWeight.Medium
-                                                )
-                                                Text(
-                                                    text = getUriSizeFormatted(context, attachedDocUri),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-                                        
-                                        // Upload progress overlay
-                                        if (isAttaching) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                CircularProgressIndicator(
-                                                    progress = attachProgress,
-                                                    modifier = Modifier.size(24.dp),
-                                                    strokeWidth = 2.dp,
-                                                    color = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                        }
-
-                                        // Close Button
-                                        IconButton(
-                                            onClick = onRemoveAttachment,
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .padding(4.dp)
-                                                .size(20.dp)
-                                                .clip(CircleShape)
-                                                .background(Color.Black.copy(alpha = 0.5f))
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Close,
-                                                contentDescription = "Remove",
-                                                tint = Color(0xFFFAFAFA),
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // 3. Message Input Area and Controls in a single row
+                // 1. Error Display Area inside Card
+                if (attachError != null) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 4.dp)
-                            .heightIn(min = 56.dp, max = 200.dp),
-                        verticalAlignment = Alignment.Bottom
+                            .background(MaterialTheme.colorScheme.errorContainer)
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        // Attachment Button with Custom popup anchoring
-                        Box {
-                            IconButton(
-                                onClick = { showAttachmentMenu = true },
-                                modifier = Modifier
-                                    .padding(bottom = 8.dp)
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Add,
-                                    contentDescription = "Attach",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Rounded.ErrorOutline, contentDescription = "Error", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = attachError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        IconButton(onClick = onRemoveAttachment, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Rounded.Close, contentDescription = "Clear", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
 
-                            // Modern Material 3 floating popup
-                            if (showAttachmentMenu) {
-                                Popup(
-                                    alignment = Alignment.TopStart,
-                                    offset = androidx.compose.ui.unit.IntOffset(x = 0, y = -195),
-                                    onDismissRequest = { showAttachmentMenu = false },
-                                    properties = androidx.compose.ui.window.PopupProperties(focusable = true)
+                // 2. Beautiful Attachment Row inside Card
+                if (attachedImageUri != null || attachedDocUri != null) {
+                    androidx.compose.foundation.lazy.LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (attachedImageUri != null) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .size(80.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
                                 ) {
-                                    Surface(
+                                    AsyncImage(
+                                        model = attachedImageUri,
+                                        contentDescription = "Image preview",
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+
+                                    // Image size overlay
+                                    val sizeStr = getUriSizeFormatted(context, attachedImageUri)
+                                    Box(
                                         modifier = Modifier
-                                            .width(230.dp)
-                                            .shadow(12.dp, RoundedCornerShape(24.dp)),
-                                        shape = RoundedCornerShape(24.dp),
-                                        color = MaterialTheme.colorScheme.surface,
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                            .fillMaxWidth()
+                                            .align(Alignment.BottomCenter)
+                                            .background(
+                                                androidx.compose.ui.graphics.Brush.verticalGradient(
+                                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))
+                                                )
+                                            )
+                                            .padding(vertical = 2.dp)
                                     ) {
-                                        Column(
-                                            modifier = Modifier.padding(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        Text(
+                                            text = sizeStr,
+                                            color = Color(0xFFFAFAFA),
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.align(Alignment.Center)
+                                        )
+                                    }
+
+                                    // Upload progress overlay
+                                    if (isAttaching) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(Color.Black.copy(alpha = 0.4f)),
+                                            contentAlignment = Alignment.Center
                                         ) {
-                                            AttachmentMenuItem(
-                                                isArabic = isArabic,
-                                                title = if (isArabic) "كاميرا" else "Camera",
-                                                subtitle = if (isArabic) "التقاط صورة فورية" else "Take a picture",
-                                                icon = Icons.Rounded.CameraAlt,
-                                                onClick = {
-                                                    showAttachmentMenu = false
-                                                    cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
-                                                }
-                                            )
-                                            AttachmentMenuItem(
-                                                isArabic = isArabic,
-                                                title = if (isArabic) "صور" else "Photos",
-                                                subtitle = if (isArabic) "اختر من معرض الصور" else "Select from Gallery",
-                                                icon = Icons.Rounded.Image,
-                                                onClick = {
-                                                    showAttachmentMenu = false
-                                                    imagePicker.launch(arrayOf("image/*"))
-                                                }
-                                            )
-                                            AttachmentMenuItem(
-                                                isArabic = isArabic,
-                                                title = if (isArabic) "ملفات" else "Files",
-                                                subtitle = if (isArabic) "رفع مستند أو ملف" else "Upload a document",
-                                                icon = Icons.Rounded.Description,
-                                                onClick = {
-                                                    showAttachmentMenu = false
-                                                    docPicker.launch(arrayOf("*/*"))
-                                                }
-                                            )
-                                            AttachmentMenuItem(
-                                                isArabic = isArabic,
-                                                title = if (isArabic) "المكونات الإضافية" else "Extensions",
-                                                subtitle = if (isArabic) "الأدوات والمكونات" else "Tools & extensions",
-                                                icon = Icons.Rounded.Extension,
-                                                onClick = {
-                                                    showAttachmentMenu = false
-                                                    android.widget.Toast.makeText(context, if (isArabic) "المكونات الإضافية قريباً!" else "Extensions coming soon!", android.widget.Toast.LENGTH_SHORT).show()
-                                                }
+                                            CircularProgressIndicator(
+                                                progress = attachProgress,
+                                                modifier = Modifier.size(24.dp),
+                                                strokeWidth = 2.dp,
+                                                color = MaterialTheme.colorScheme.primary
                                             )
                                         }
                                     }
+
+                                    // Close Button
+                                    IconButton(
+                                        onClick = onRemoveAttachment,
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(4.dp)
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.5f))
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Close,
+                                            contentDescription = "Remove",
+                                            tint = Color(0xFFFAFAFA),
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
 
-                        // Text Input
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 4.dp, vertical = 14.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            if (text.isEmpty()) {
-                                Text(
-                                    text = if (isArabic) "الرد على Nabih AI" else "Message Nabih AI",
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                        if (attachedDocUri != null) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .height(80.dp)
+                                        .widthIn(min = 140.dp, max = 200.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .padding(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Description,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = attachedDocName ?: "Document",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Text(
+                                                text = getUriSizeFormatted(context, attachedDocUri),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    
+                                    // Upload progress overlay
+                                    if (isAttaching) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            CircularProgressIndicator(
+                                                progress = attachProgress,
+                                                modifier = Modifier.size(24.dp),
+                                                strokeWidth = 2.dp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+
+                                    // Close Button
+                                    IconButton(
+                                        onClick = onRemoveAttachment,
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(4.dp)
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.5f))
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Close,
+                                            contentDescription = "Remove",
+                                            tint = Color(0xFFFAFAFA),
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                }
                             }
-                            androidx.compose.foundation.text.BasicTextField(
-                                value = text,
-                                onValueChange = onTextChange,
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                                maxLines = 8,
-                                interactionSource = interactionSource
+                        }
+                    }
+                }
+
+                // 3. Text Input Box (Full-width top layout)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp, bottom = 4.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (text.isEmpty()) {
+                        Text(
+                            text = if (!isOnline) {
+                                if (isArabic) "لا يوجد اتصال بالإنترنت..." else "No internet connection..."
+                            } else {
+                                if (isArabic) "الرد على Nabih AI..." else "Reply to Nabih AI..."
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                        )
+                    }
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = text,
+                        onValueChange = onTextChange,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                        maxLines = 8,
+                        interactionSource = interactionSource
+                    )
+                }
+
+                // 4. Action buttons bar (At the bottom of the container)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 8.dp, bottom = 8.dp, top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Attachment Button with Custom popup anchoring
+                    Box {
+                        IconButton(
+                            onClick = { showAttachmentMenu = true },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = "Attach",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
-                        // Send / Stop button inside AnimatedContent
-                        AnimatedContent(
-                            targetState = when {
-                                isGenerating -> 0
-                                text.isNotBlank() || attachedImageUri != null || attachedDocUri != null -> 1
-                                else -> 2
-                            },
-                            transitionSpec = {
-                                scaleIn(animationSpec = tween(180)) togetherWith scaleOut(animationSpec = tween(180))
-                            },
-                            label = "composer_action",
-                            modifier = Modifier.padding(bottom = 8.dp, end = 8.dp)
-                        ) { state ->
-                            when (state) {
-                                0 -> {
-                                    IconButton(
-                                        onClick = onStop,
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.error)
+                        // Modern Material 3 floating popup
+                        if (showAttachmentMenu) {
+                            androidx.compose.ui.window.Popup(
+                                alignment = Alignment.TopStart,
+                                offset = androidx.compose.ui.unit.IntOffset(x = 0, y = -195),
+                                onDismissRequest = { showAttachmentMenu = false },
+                                properties = androidx.compose.ui.window.PopupProperties(focusable = true)
+                            ) {
+                                Surface(
+                                    modifier = Modifier
+                                        .width(230.dp)
+                                        .shadow(12.dp, RoundedCornerShape(24.dp)),
+                                    shape = RoundedCornerShape(24.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Stop,
-                                            contentDescription = "Stop",
-                                            tint = MaterialTheme.colorScheme.onError,
-                                            modifier = Modifier.size(20.dp)
+                                        AttachmentMenuItem(
+                                            isArabic = isArabic,
+                                            title = if (isArabic) "كاميرا" else "Camera",
+                                            subtitle = if (isArabic) "التقاط صورة فورية" else "Take a picture",
+                                            icon = Icons.Rounded.CameraAlt,
+                                            onClick = {
+                                                showAttachmentMenu = false
+                                                cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                                            }
                                         )
-                                    }
-                                }
-                                1 -> {
-                                    IconButton(
-                                        onClick = { onSend(text) },
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.primary)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.ArrowUpward,
-                                            contentDescription = "Send",
-                                            tint = MaterialTheme.colorScheme.onPrimary,
-                                            modifier = Modifier.size(20.dp)
+                                        AttachmentMenuItem(
+                                            isArabic = isArabic,
+                                            title = if (isArabic) "صور" else "Photos",
+                                            subtitle = if (isArabic) "اختر من معرض الصور" else "Select from Gallery",
+                                            icon = Icons.Rounded.Image,
+                                            onClick = {
+                                                showAttachmentMenu = false
+                                                imagePicker.launch(arrayOf("image/*"))
+                                            }
                                         )
-                                    }
-                                }
-                                2 -> {
-                                    // Disabled state
-                                    IconButton(
-                                        onClick = {},
-                                        enabled = false,
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.ArrowUpward,
-                                            contentDescription = "Send",
-                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                            modifier = Modifier.size(20.dp)
+                                        AttachmentMenuItem(
+                                            isArabic = isArabic,
+                                            title = if (isArabic) "ملفات" else "Files",
+                                            subtitle = if (isArabic) "رفع مستند أو ملف" else "Upload a document",
+                                            icon = Icons.Rounded.Description,
+                                            onClick = {
+                                                showAttachmentMenu = false
+                                                docPicker.launch(arrayOf("*/*"))
+                                            }
+                                        )
+                                        AttachmentMenuItem(
+                                            isArabic = isArabic,
+                                            title = if (isArabic) "المكونات الإضافية" else "Extensions",
+                                            subtitle = if (isArabic) "الأدوات والمكونات" else "Tools & extensions",
+                                            icon = Icons.Rounded.Extension,
+                                            onClick = {
+                                                showAttachmentMenu = false
+                                                android.widget.Toast.makeText(context, if (isArabic) "المكونات الإضافية قريباً!" else "Extensions coming soon!", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
                                         )
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // Model Selection Chip/Pill
+                    var showModelMenu by remember { mutableStateOf(false) }
+                    Box {
+                        Surface(
+                            onClick = { showModelMenu = true },
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = selectedModel.displayName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = showModelMenu,
+                            onDismissRequest = { showModelMenu = false },
+                            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                        ) {
+                            val allModels = listOf(
+                                com.example.core.model.AiModel.NABIH_ULTRA,
+                                com.example.core.model.AiModel.GEMINI,
+                                com.example.core.model.AiModel.CHATGPT,
+                                com.example.core.model.AiModel.CLAUDE
+                            )
+                            val availableModels = allModels.filter { model ->
+                                when (model) {
+                                    com.example.core.model.AiModel.NABIH_ULTRA -> true
+                                    com.example.core.model.AiModel.GEMINI -> settings.googleApiKey.isNotEmpty() || settings.nabihApiKey.isNotEmpty()
+                                    com.example.core.model.AiModel.CHATGPT -> settings.openaiApiKey.isNotEmpty()
+                                    com.example.core.model.AiModel.CLAUDE -> settings.anthropicApiKey.isNotEmpty()
+                                }
+                            }
+                            availableModels.forEach { model ->
+                                val isSelected = model == selectedModel
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = model.displayName,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    },
+                                    onClick = {
+                                        showModelMenu = false
+                                        onSelectModel(model)
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Send / Stop action button (Fully Circular)
+                    val hasContent = text.isNotBlank() || attachedImageUri != null || attachedDocUri != null
+                    val isSendEnabled = (hasContent && isOnline) || isGenerating
+                    val buttonColor = when {
+                        isGenerating -> MaterialTheme.colorScheme.primary
+                        hasContent && isOnline -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                    }
+                    val iconColor = when {
+                        isGenerating -> MaterialTheme.colorScheme.onPrimary
+                        hasContent && isOnline -> MaterialTheme.colorScheme.onPrimary
+                        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(buttonColor)
+                            .clickable(
+                                enabled = isSendEnabled,
+                                onClick = {
+                                    if (isGenerating) {
+                                        onStop()
+                                    } else {
+                                        onSend(text)
+                                    }
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isGenerating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = iconColor,
+                                strokeWidth = 2.dp
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(5.dp)
+                                    .background(iconColor, RoundedCornerShape(1.dp))
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.ArrowUpward,
+                                contentDescription = "Send",
+                                tint = iconColor,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
                 }
@@ -1972,12 +2143,16 @@ fun ConversationItem(
 
     Surface(
         onClick = onSelect,
-        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-        shape = RoundedCornerShape(16.dp),
-        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
+        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -1989,7 +2164,7 @@ fun ConversationItem(
                     Icon(
                         imageVector = Icons.Rounded.PushPin,
                         contentDescription = "Pinned",
-                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
+                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                         modifier = Modifier
                             .size(18.dp)
                             .padding(end = 4.dp)
@@ -2000,21 +2175,21 @@ fun ConversationItem(
                         text = conversation.title,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                     Text(
                         text = formattedTime,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
             }
             Box {
                 IconButton(onClick = { showMenu = true }, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Rounded.MoreVert, contentDescription = "More", tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Rounded.MoreVert, contentDescription = "More", tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     DropdownMenuItem(
@@ -2043,6 +2218,60 @@ fun ConversationItem(
     }
 }
 
+@Composable
+fun DrawerMenuItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    isArabic: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val backgroundColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    } else {
+        Color.Transparent
+    }
+    
+    val contentColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+    }
+
+    Surface(
+        onClick = onClick,
+        color = backgroundColor,
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .padding(horizontal = 16.dp, vertical = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = contentColor,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MainDrawerContent(
@@ -2066,8 +2295,21 @@ fun MainDrawerContent(
     val isArabic = settings.language == com.example.core.model.AppLanguage.ARABIC
     val context = androidx.compose.ui.platform.LocalContext.current
     
+    val todayStart = remember(conversations) {
+        val cal = java.util.Calendar.getInstance()
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        cal.timeInMillis
+    }
+    
     val (pinnedConversations, unpinnedConversations) = remember(conversations) {
         conversations.partition { it.isPinned }
+    }
+    
+    val (todayConversations, olderConversations) = remember(unpinnedConversations, todayStart) {
+        unpinnedConversations.partition { it.updatedAt >= todayStart }
     }
     
     var conversationToRename by remember { mutableStateOf<com.example.core.database.Conversation?>(null) }
@@ -2102,52 +2344,102 @@ fun MainDrawerContent(
 
     ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
+            // Header with statusBarsPadding and spacious branding
             Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Nabih AI", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-                IconButton(onClick = { onNewChat(); onCloseDrawer() }) {
-                    Icon(Icons.Rounded.Add, contentDescription = "New Chat", tint = MaterialTheme.colorScheme.onBackground)
-                }
+                Icon(
+                    painter = painterResource(id = R.drawable.logo),
+                    contentDescription = null,
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(32.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Nabih AI",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
             }
             
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             
-            androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 12.dp)
+            ) {
+                // Group 1: New Chat, Search, Files
+                item {
+                    Button(
+                        onClick = { onNewChat(); onCloseDrawer() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isArabic) "محادثة جديدة" else "New Chat",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
                 
                 item {
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(24.dp)) },
-                        label = { Text(if (isArabic) "البحث" else "Search", style = MaterialTheme.typography.bodyLarge) },
-                        selected = false,
+                    DrawerMenuItem(
+                        icon = Icons.Rounded.Search,
+                        label = if (isArabic) "البحث" else "Search",
+                        isSelected = false,
                         onClick = { onNavigateTo("search"); onCloseDrawer() },
-                        colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                        isArabic = isArabic
                     )
                 }
                 
                 item {
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Rounded.FolderOpen, contentDescription = null, modifier = Modifier.size(24.dp)) },
-                        label = { Text(if (isArabic) "الملفات" else "Files", style = MaterialTheme.typography.bodyLarge) },
-                        selected = false,
+                    DrawerMenuItem(
+                        icon = Icons.Rounded.FolderOpen,
+                        label = if (isArabic) "الملفات" else "Files",
+                        isSelected = false,
                         onClick = { onNavigateTo("files"); onCloseDrawer() },
-                        colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                        isArabic = isArabic
                     )
                 }
 
+                // 24dp spacing before and after Divider separating Group 1 and Group 2
                 item {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 8.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
 
+                // Group 2: Categories (Favorites, Today, Older)
                 if (pinnedConversations.isNotEmpty()) {
                     item {
                         Text(
-                            text = if (isArabic) "المحادثات المثبتة" else "Pinned",
-                            style = MaterialTheme.typography.labelMedium,
+                            text = if (isArabic) "المفضلة" else "Favorites",
+                            style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
@@ -2169,29 +2461,54 @@ fun MainDrawerContent(
                             modifier = Modifier.animateItemPlacement()
                         )
                     }
-                    
+                }
+
+                if (todayConversations.isNotEmpty()) {
+                    if (pinnedConversations.isNotEmpty()) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
                     item {
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        Text(
+                            text = if (isArabic) "اليوم" else "Today",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                        )
+                    }
+                    
+                    items(todayConversations, key = { it.id }) { conv ->
+                        ConversationItem(
+                            conversation = conv,
+                            isSelected = conv.id == activeConversationId,
+                            isArabic = isArabic,
+                            onSelect = { onSelectConversation(conv.id); onCloseDrawer() },
+                            onTogglePin = { onTogglePinConversation(conv) },
+                            onRename = { 
+                                renameNewTitle = conv.title
+                                conversationToRename = conv
+                            },
+                            onDelete = { onDeleteConversation(conv.id) },
+                            modifier = Modifier.animateItemPlacement()
                         )
                     }
                 }
 
-                if (unpinnedConversations.isNotEmpty()) {
-                    if (pinnedConversations.isNotEmpty()) {
-                        item {
-                            Text(
-                                text = if (isArabic) "المحادثات الأخيرة" else "Recent",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-                            )
-                        }
+                if (olderConversations.isNotEmpty()) {
+                    if (pinnedConversations.isNotEmpty() || todayConversations.isNotEmpty()) {
+                        item { Spacer(modifier = Modifier.height(16.dp)) }
+                    }
+                    item {
+                        Text(
+                            text = if (isArabic) "أقدم" else "Older",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                        )
                     }
                     
-                    items(unpinnedConversations, key = { it.id }) { conv ->
+                    items(olderConversations, key = { it.id }) { conv ->
                         ConversationItem(
                             conversation = conv,
                             isSelected = conv.id == activeConversationId,
@@ -2209,36 +2526,79 @@ fun MainDrawerContent(
                 }
             }
             
+            // Clear line/divider separating Group 2 and the sticky Group 3 footer
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             
-            Column(modifier = Modifier.padding(8.dp)) {
-                // API Keys Shortcut
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Rounded.VpnKey, contentDescription = null, modifier = Modifier.size(24.dp)) },
-                    label = { Text(if (isArabic) "مفاتيح API" else "API Keys", style = MaterialTheme.typography.bodyLarge) },
-                    selected = false,
+            // Sticky Bottom Section (Group 3)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .navigationBarsPadding()
+                    .padding(vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // 1. API Keys Shortcut
+                DrawerMenuItem(
+                    icon = Icons.Rounded.VpnKey,
+                    label = if (isArabic) "مفاتيح API" else "API Keys",
+                    isSelected = false,
                     onClick = { onNavigateTo("api_keys"); onCloseDrawer() },
-                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    isArabic = isArabic
                 )
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                NavigationDrawerItem(
-                    icon = {
+                // 2. Modern M3 Account Card
+                Card(
+                    onClick = { onNavigateTo("account"); onCloseDrawer() },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(40.dp) // Adjusted to clean 40dp
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (settings.profilePictureUri.isNotEmpty()) {
+                            val isFileExist = remember(settings.profilePictureUri) {
+                                if (settings.profilePictureUri.isEmpty()) {
+                                    false
+                                } else {
+                                    try {
+                                        val uri = android.net.Uri.parse(settings.profilePictureUri)
+                                        if (uri.scheme == "file") {
+                                            uri.path?.let { java.io.File(it).exists() } ?: false
+                                        } else if (settings.profilePictureUri.startsWith("/")) {
+                                            java.io.File(settings.profilePictureUri).exists()
+                                        } else {
+                                            true
+                                        }
+                                    } catch (e: Exception) {
+                                        false
+                                    }
+                                }
+                            }
+                            if (settings.profilePictureUri.isNotEmpty() && isFileExist) {
                                 AsyncImage(
                                     model = settings.profilePictureUri,
                                     contentDescription = "Profile Picture",
                                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier.fillMaxSize(),
+                                    onError = {
+                                        android.util.Log.e("MainScreen", "Coil failed to load drawer profile picture")
+                                    }
                                 )
                             } else {
                                 val initials = settings.userName.split(" ").filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1) }.uppercase()
@@ -2259,36 +2619,40 @@ fun MainDrawerContent(
                                 }
                             }
                         }
-                    },
-                    label = {
-                        Column {
+                        
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (isArabic) "الحساب" else "Account",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold
+                                text = if (settings.userName.isNotBlank()) settings.userName else (if (isArabic) "المستخدم" else "User"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            if (settings.userName.isNotEmpty()) {
-                                Text(
-                                    text = settings.userName,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                            Text(
+                                text = if (settings.userEmail.isNotBlank()) settings.userEmail else (if (isArabic) "إدارة الحساب" else "Manage Account"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                    },
-                    selected = false,
-                    onClick = { onNavigateTo("account"); onCloseDrawer() },
-                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
+                        
+                        Icon(
+                            imageVector = if (isArabic) Icons.AutoMirrored.Rounded.KeyboardArrowLeft else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
 
-                NavigationDrawerItem(
-                    icon = { Icon(Icons.Rounded.Settings, contentDescription = null, modifier = Modifier.size(24.dp)) },
-                    label = { Text(if (isArabic) "الإعدادات" else "Settings", style = MaterialTheme.typography.bodyLarge) },
-                    selected = false,
+                // Spacing between Account and Settings below it
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // 3. Settings Item
+                DrawerMenuItem(
+                    icon = Icons.Rounded.Settings,
+                    label = if (isArabic) "الإعدادات" else "Settings",
+                    isSelected = false,
                     onClick = { onNavigateToSettings(); onCloseDrawer() },
-                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    isArabic = isArabic
                 )
             }
         }

@@ -35,7 +35,10 @@ import coil.compose.AsyncImage
 import com.example.feature.settings.SettingsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.io.File
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.draw.shadow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,41 +54,67 @@ fun AccountScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    var fullName by remember(settings?.userName) { mutableStateOf(settings?.userName ?: "") }
-    var bio by remember(settings?.personalInfo) { mutableStateOf(settings?.personalInfo ?: "") }
-    var profilePictureUri by remember(settings?.profilePictureUri) { mutableStateOf(settings?.profilePictureUri ?: "") }
+    var isInitialized by remember { mutableStateOf(false) }
+    var fullName by remember { mutableStateOf("") }
+    var bio by remember { mutableStateOf("") }
+    var profilePictureUri by remember { mutableStateOf("") }
+
+    LaunchedEffect(settings) {
+        if (settings != null && !isInitialized) {
+            fullName = settings?.userName ?: ""
+            bio = settings?.personalInfo ?: ""
+            profilePictureUri = settings?.profilePictureUri ?: ""
+            isInitialized = true
+        }
+    }
 
     var isFullNameError by remember { mutableStateOf(false) }
     
     var isSaving by remember { mutableStateOf(false) }
     var isDeleting by remember { mutableStateOf(false) }
+    var isUploadingImage by remember { mutableStateOf(false) }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var deleteConfirmationText by remember { mutableStateOf("") }
+    var deleteErrorText by remember { mutableStateOf<String?>(null) }
     var showPhotoOptions by remember { mutableStateOf(false) }
 
     val profileChanged = fullName != (settings?.userName ?: "") ||
                          bio != (settings?.personalInfo ?: "") ||
                          profilePictureUri != (settings?.profilePictureUri ?: "")
 
-    val photoUri = remember {
-        try {
-            val file = File.createTempFile("profile_", ".jpg", context.cacheDir).apply { createNewFile() }
-            FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-        } catch (e: Exception) {
-            android.util.Log.e("AccountScreen", "Failed to create temp photo file", e)
-            Uri.EMPTY
-        }
-    }
-
-    val takePhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        if (success && photoUri != Uri.EMPTY) {
-            profilePictureUri = photoUri.toString()
+    val isFileExist = remember(profilePictureUri) {
+        if (profilePictureUri.isEmpty()) {
+            false
+        } else {
+            try {
+                val uri = Uri.parse(profilePictureUri)
+                if (uri.scheme == "file") {
+                    uri.path?.let { File(it).exists() } ?: false
+                } else if (profilePictureUri.startsWith("/")) {
+                    File(profilePictureUri).exists()
+                } else {
+                    true
+                }
+            } catch (e: Exception) {
+                false
+            }
         }
     }
 
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
-            profilePictureUri = uri.toString()
+            coroutineScope.launch {
+                isUploadingImage = true
+                delay(800) // Aesthetic delay for progress feedback
+                val localUri = copyUriToInternalStorage(context, uri)
+                if (localUri != null) {
+                    profilePictureUri = localUri.toString()
+                } else {
+                    Toast.makeText(context, if (isArabic) "فشل حفظ الصورة" else "Failed to save image", Toast.LENGTH_SHORT).show()
+                }
+                isUploadingImage = false
+            }
         }
     }
 
@@ -99,22 +128,7 @@ fun AccountScreen(
                     modifier = Modifier.padding(16.dp)
                 )
                 ListItem(
-                    headlineContent = { Text(if (isArabic) "التقاط صورة" else "Take a photo") },
-                    modifier = Modifier.clickable {
-                        showPhotoOptions = false
-                        if (photoUri != Uri.EMPTY) {
-                            try {
-                                takePhotoLauncher.launch(photoUri)
-                            } catch (e: Exception) {
-                                Toast.makeText(context, if (isArabic) "تعذر تشغيل الكاميرا" else "Failed to launch camera", Toast.LENGTH_SHORT).show()
-                            }
-                        } else {
-                            Toast.makeText(context, if (isArabic) "تعذر حفظ الصورة المؤقتة" else "Failed to create temp photo file", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                )
-                ListItem(
-                    headlineContent = { Text(if (isArabic) "اختيار من المعرض" else "Choose from gallery") },
+                    headlineContent = { Text(if (isArabic) "اختيار صورة جديدة" else "Choose new photo") },
                     modifier = Modifier.clickable {
                         showPhotoOptions = false
                         try {
@@ -124,48 +138,136 @@ fun AccountScreen(
                         }
                     }
                 )
-                if (profilePictureUri.isNotEmpty()) {
-                    ListItem(
-                        headlineContent = { Text(if (isArabic) "إزالة الصورة" else "Remove picture", color = MaterialTheme.colorScheme.error) },
-                        modifier = Modifier.clickable {
-                            showPhotoOptions = false
+                ListItem(
+                    headlineContent = { Text(if (isArabic) "إزالة الصورة" else "Remove picture", color = MaterialTheme.colorScheme.error) },
+                    modifier = Modifier.clickable {
+                        showPhotoOptions = false
+                        coroutineScope.launch {
+                            isUploadingImage = true
+                            delay(300)
                             profilePictureUri = ""
+                            isUploadingImage = false
                         }
-                    )
-                }
+                    }
+                )
             }
         }
     }
 
     if (showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = { if (!isDeleting) showDeleteDialog = false },
-            title = { Text(if (isArabic) "حذف الحساب" else "Delete Account") },
-            text = { Text(if (isArabic) "هذا الإجراء دائم ولا يمكن التراجع عنه. هل أنت متأكد أنك تريد حذف حسابك؟" else "This action is permanent and cannot be undone. Are you sure you want to delete your account?") },
+            onDismissRequest = { 
+                if (!isDeleting) {
+                    showDeleteDialog = false
+                    deleteConfirmationText = ""
+                    deleteErrorText = null
+                }
+            },
+            title = { 
+                Text(
+                    text = if (isArabic) "حذف الحساب نهائياً" else "Delete Account Permanently",
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Bold
+                ) 
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = if (isArabic) 
+                            "تحذير: هذا الإجراء نهائي وسيتم حذف جميع بياناتك ومحادثاتك بالكامل ولا يمكن التراجع عنه بأي حال من الأحوال."
+                            else "Warning: This action is permanent. All your data, chats, and settings will be deleted completely and cannot be recovered.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    
+                    Text(
+                        text = if (isArabic) 
+                            "لتأكيد الحذف، يرجى كتابة كلمة \"حذف\" في الحقل أدناه:" 
+                            else "To confirm deletion, please type \"DELETE\" in the field below:",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    OutlinedTextField(
+                        value = deleteConfirmationText,
+                        onValueChange = { 
+                            deleteConfirmationText = it
+                            deleteErrorText = null
+                        },
+                        placeholder = { Text(if (isArabic) "اكتب \"حذف\"" else "Type \"DELETE\"") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = deleteErrorText != null,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.error,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        )
+                    )
+                    
+                    if (deleteErrorText != null) {
+                        Text(
+                            text = deleteErrorText!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = {
+                        val expectedWord = if (isArabic) "حذف" else "DELETE"
+                        val trimmedInput = deleteConfirmationText.trim()
+                        val isConfirmed = trimmedInput.equals(expectedWord, ignoreCase = true) || 
+                                          trimmedInput == "حذف" || 
+                                          trimmedInput.equals("DELETE", ignoreCase = true)
+                        
+                        if (!isConfirmed) {
+                            deleteErrorText = if (isArabic) "الكلمة غير مطابقة" else "Confirmation word does not match"
+                            return@Button
+                        }
+                        
                         coroutineScope.launch {
                             isDeleting = true
-                            delay(1000) // Simulating network request
-                            onDeleteAccount()
-                            isDeleting = false
-                            showDeleteDialog = false
-                            Toast.makeText(context, if (isArabic) "تم حذف الحساب بنجاح" else "Account deleted successfully", Toast.LENGTH_SHORT).show()
+                            try {
+                                val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                                if (firebaseUser != null) {
+                                    firebaseUser.delete().await()
+                                }
+                                onDeleteAccount()
+                                showDeleteDialog = false
+                                deleteConfirmationText = ""
+                                Toast.makeText(context, if (isArabic) "تم حذف الحساب بنجاح" else "Account deleted successfully", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                android.util.Log.e("AccountScreen", "Error deleting Firebase user", e)
+                                val msg = if (isArabic) {
+                                    "فشل حذف الحساب. قد تحتاج لإعادة تسجيل الدخول أولاً لتنفيذ هذا الإجراء الحساس."
+                                } else {
+                                    "Failed to delete account. You may need to re-authenticate before performing this sensitive action."
+                                }
+                                deleteErrorText = msg
+                            } finally {
+                                isDeleting = false
+                            }
                         }
                     },
+                    enabled = deleteConfirmationText.isNotBlank() && !isDeleting,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     if (isDeleting) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onError, strokeWidth = 2.dp)
                     } else {
-                        Text(if (isArabic) "حذف" else "Delete")
+                        Text(if (isArabic) "حذف الحساب" else "Delete Account")
                     }
                 }
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showDeleteDialog = false },
+                    onClick = { 
+                        showDeleteDialog = false
+                        deleteConfirmationText = ""
+                        deleteErrorText = null
+                    },
                     enabled = !isDeleting
                 ) {
                     Text(if (isArabic) "إلغاء" else "Cancel")
@@ -201,28 +303,36 @@ fun AccountScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             
-            // Avatar Section
+            // 5. Spacing & layout: top margin (24dp)
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // 1. Avatar Section
             Box(contentAlignment = Alignment.BottomEnd) {
                 Box(
                     modifier = Modifier
                         .size(120.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceContainer),
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (profilePictureUri.isNotEmpty()) {
+                    if (profilePictureUri.isNotEmpty() && isFileExist) {
                         AsyncImage(
                             model = profilePictureUri,
                             contentDescription = "Profile Picture",
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            onError = {
+                                android.util.Log.e("AccountScreen", "Coil failed to load profile picture from $profilePictureUri")
+                            }
                         )
                     } else {
+                        // 1.1 Default colorful avatar with initials
                         val initials = fullName.split(" ").filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1) }.uppercase()
                         if (initials.isNotEmpty()) {
                             Text(
                                 text = initials,
-                                style = MaterialTheme.typography.displayMedium,
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         } else {
@@ -234,68 +344,157 @@ fun AccountScreen(
                             )
                         }
                     }
+
+                    // 1.3 Upload progress state overlay
+                    if (isUploadingImage) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.4f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(36.dp),
+                                color = Color.White,
+                                strokeWidth = 3.dp
+                            )
+                        }
+                    }
                 }
                 
-                IconButton(
-                    onClick = { showPhotoOptions = true },
+                // 1.2 Camera button: larger touch target & white border (2dp)
+                Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .offset(x = (-4).dp, y = (-4).dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
-                        .border(2.dp, MaterialTheme.colorScheme.background, CircleShape)
+                        .size(42.dp)
+                        .offset(x = 4.dp, y = 4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                        .border(2.dp, Color.White, CircleShape)
+                        .clickable {
+                            if (profilePictureUri.isEmpty()) {
+                                try {
+                                    galleryLauncher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, if (isArabic) "تعذر فتح معرض الصور" else "Failed to open gallery", Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                showPhotoOptions = true
+                            }
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.CameraAlt,
                         contentDescription = "Change Picture",
                         tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            // User Info Section
+            // 2. User Info Section
             Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()) {
                 
-                OutlinedTextField(
-                    value = fullName,
-                    onValueChange = { fullName = it; isFullNameError = false },
-                    label = { Text(if (isArabic) "الاسم الكامل" else "Full Name") },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    isError = isFullNameError
-                )
-
-                OutlinedTextField(
-                    value = settings?.userEmail ?: "",
-                    onValueChange = {},
-                    label = { Text(if (isArabic) "البريد الإلكتروني" else "Email Address") },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    readOnly = true,
-                    enabled = false,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                        disabledBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                // 2.1 Full Name Input with permanent label
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = if (isArabic) "الاسم الكامل" else "Full Name",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(start = 4.dp)
                     )
-                )
+                    OutlinedTextField(
+                        value = fullName,
+                        onValueChange = { fullName = it; isFullNameError = false },
+                        placeholder = { Text(if (isArabic) "أدخل اسمك الكامل" else "Enter your full name") },
+                        shape = RoundedCornerShape(12.dp),
+                        isError = isFullNameError,
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        )
+                    )
+                }
+
+                // 2.2 Read-only Email Field with distinct visual style and support note
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = if (isArabic) "البريد الإلكتروني" else "Email Address",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                    OutlinedTextField(
+                        value = settings?.userEmail ?: "",
+                        onValueChange = {},
+                        placeholder = { Text(if (isArabic) "البريد الإلكتروني" else "Email Address") },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        readOnly = true,
+                        enabled = false,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            disabledBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                            disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), // Light gray background
+                            disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                    )
+                    Text(
+                        text = if (isArabic) "لتغيير البريد الإلكتروني، يرجى التواصل مع الدعم الفني." else "To change your email address, please contact support.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                    )
+                }
                 
-                OutlinedTextField(
-                    value = bio,
-                    onValueChange = { bio = it },
-                    label = { Text(if (isArabic) "نبذة (اختياري)" else "Bio (Optional)") },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                    maxLines = 5
-                )
+                // 2.3 Bio Input with character count (max 150)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = if (isArabic) "نبذة عنك" else "Bio",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                    OutlinedTextField(
+                        value = bio,
+                        onValueChange = { 
+                            if (it.length <= 150) {
+                                bio = it 
+                            }
+                        },
+                        placeholder = { Text(if (isArabic) "اكتب نبذة قصيرة عنك..." else "Write a short bio about yourself...") },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 5,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        )
+                    )
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        Text(
+                            text = "${bio.length}/150",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (bio.length >= 150) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(end = 4.dp, top = 2.dp)
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Action Buttons
+            // 3. Action Buttons
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = { 
@@ -319,7 +518,13 @@ fun AccountScreen(
                     },
                     enabled = profileChanged && !isSaving,
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                        disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    ),
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {
                     if (isSaving) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
@@ -338,22 +543,22 @@ fun AccountScreen(
                         },
                         enabled = !isSaving,
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().height(50.dp)
+                        modifier = Modifier.fillMaxWidth().height(56.dp)
                     ) {
                         Text(if (isArabic) "إلغاء" else "Cancel", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            // 4. Delete Account Section with vertical spacer (32dp)
+            Spacer(modifier = Modifier.height(32.dp))
 
-            // Delete Account Button
             OutlinedButton(
                 onClick = { showDeleteDialog = true },
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                modifier = Modifier.fillMaxWidth().height(50.dp)
+                modifier = Modifier.fillMaxWidth().height(56.dp)
             ) {
                 Icon(Icons.Outlined.Delete, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
@@ -364,3 +569,33 @@ fun AccountScreen(
         }
     }
 }
+
+private fun copyUriToInternalStorage(context: android.content.Context, uri: android.net.Uri): android.net.Uri? {
+    return try {
+        val contentResolver = context.contentResolver
+        val type = contentResolver.getType(uri)
+        val extension = when {
+            type != null && type.contains("png") -> "png"
+            else -> "jpg"
+        }
+        val profileDir = File(context.filesDir, "profile_images")
+        if (!profileDir.exists()) {
+            profileDir.mkdirs()
+        }
+        // Delete previous profile files in the directory
+        profileDir.listFiles()?.forEach { file ->
+            try { file.delete() } catch (e: Exception) {}
+        }
+        val destFile = File(profileDir, "profile_pic_${System.currentTimeMillis()}.$extension")
+        contentResolver.openInputStream(uri)?.use { inputStream ->
+            java.io.FileOutputStream(destFile).use { outputStream ->
+                inputStream.copyTo(outputStream)
+            }
+        }
+        android.net.Uri.fromFile(destFile)
+    } catch (e: Exception) {
+        android.util.Log.e("AccountScreen", "Failed to copy image to internal storage", e)
+        null
+    }
+}
+

@@ -41,18 +41,15 @@ fun ApiKeysScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
+        AiConfigurationSection(
+            settings = settings,
+            viewModel = settingsViewModel,
+            isArabic = isArabic,
+            snackbarHostState = snackbarHostState,
             modifier = modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 48.dp)
-        ) {
-            item {
-                AiConfigurationSection(settings, settingsViewModel, isArabic, snackbarHostState)
-            }
-        }
+        )
     }
 }

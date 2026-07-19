@@ -37,6 +37,48 @@ Nabih AI functions as a central portal for communicating with advanced artificia
    - Sync Gradle files.
    - Run the `:app` module on a compatible Android device or emulator.
 
+## إعداد مفتاح API قبل البناء اليدوي (Manual Builds Setup)
+
+عند بناء التطبيق كـ **Release APK** أو تشغيله يدوياً من خلال **Android Studio** (بدلاً من بيئة AI Studio مباشرة)، ستحتاج إلى تكوين مفتاح Gemini API الحقيقي الخاص بك محلياً لضمان عمل طراز Nabih Ultra ومميزات Gemini بشكل طبيعي. الاعتماد على لوحة أسرار AI Studio (Secrets Panel) يعمل فقط داخل بيئة التطوير السحابية ولا ينطبق على البناء اليدوي المحلي.
+
+لإعداد المفتاح، اتبع الخطوات التالية قبل تشغيل أي عملية Build أو Generate Signed APK:
+
+1. **إنشاء ملف البيئة محلياً:**
+   قم بنسخ ملف `.env.example` في الجذر الرئيسي للمشروع وأعد تسميته إلى `.env`.
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **تحديث قيمة المفتاح:**
+   افتح ملف `.env` وقم بتغيير قيمة `GEMINI_API_KEY` الوهمية بمفتاحك الحقيقي:
+   ```properties
+   GEMINI_API_KEY=AIzaSyYourActualKeyHere...
+   ```
+
+> ⚠️ **ملاحظة أمنية:** تم إضافة فحص وقت البناء (Build-time validation) يمنع تصدير APK أو إتمام عملية البناء في حال كانت قيمة المفتاح فارغة أو مطابقة للقيمة الوهمية `MY_GEMINI_API_KEY` لمنع تصدير تطبيقات غير صالحة بصمت. كما أن ملف `.env` مستثنى تماماً من تتبع Git عبر ملف `.gitignore` لحماية خصوصية مفاتيحك.
+
+---
+
+### Manual API Key Setup (English)
+
+When building the application as a **Release APK** or running it directly via **Android Studio** (instead of the AI Studio cloud environment), you must configure your Gemini API Key locally. Relying on the AI Studio secrets panel only works within the cloud environment and does not apply to manual local builds.
+
+To set up the key, follow these steps before executing any Build or Generate Signed APK task:
+
+1. **Create the Environment File:**
+   Copy the `.env.example` file in the project root and rename it to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Update the API Key:**
+   Open `.env` and replace the placeholder `GEMINI_API_KEY` with your actual Gemini API key:
+   ```properties
+   GEMINI_API_KEY=AIzaSyYourActualKeyHere...
+   ```
+
+> ⚠️ **Security Note:** A build-time validation check is in place. It will halt the build with an error if the key is empty, contains placeholder words, or remains set to `MY_GEMINI_API_KEY`. The `.env` file is fully ignored via `.gitignore` to keep your credentials secure.
+
 ## License
 
 This project is licensed under the Apache License 2.0. See the `LICENSE` file for details.

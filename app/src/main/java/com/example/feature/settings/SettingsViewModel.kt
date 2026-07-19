@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
@@ -112,8 +113,15 @@ class SettingsViewModel(
     fun updateCompletionNotifications(enabled: Boolean) {
         settingsRepository.updateCompletionNotifications(enabled)
     }
+    fun updateRemindersEnabled(enabled: Boolean) {
+        settingsRepository.updateRemindersEnabled(enabled)
+    }
     fun updateHapticFeedback(enabled: Boolean) {
         settingsRepository.updateHapticFeedback(enabled)
+    }
+
+    fun updateOnboardingCompleted(completed: Boolean) {
+        settingsRepository.updateOnboardingCompleted(completed)
     }
 
     fun saveApiKeys(
@@ -373,5 +381,121 @@ class SettingsViewModel(
         viewModelScope.launch {
             memoryRepository.deleteMemory(id)
         }
+    }
+
+    fun calculateCacheSize(context: android.content.Context, onResult: (String) -> Unit) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val cacheSize = getDirSize(context.cacheDir) + (context.externalCacheDir?.let { getDirSize(it) } ?: 0L)
+            val sizeStr = formatSize(cacheSize)
+            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                onResult(sizeStr)
+            }
+        }
+    }
+
+    fun clearAppCache(context: android.content.Context, onComplete: () -> Unit) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            deleteDirContent(context.cacheDir)
+            context.externalCacheDir?.let { deleteDirContent(it) }
+            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                onComplete()
+            }
+        }
+    }
+
+    fun exportConversations(context: android.content.Context, formatJson: Boolean, onComplete: (android.net.Uri?) -> Unit) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val db = com.example.core.database.AppDatabase.getDatabase(context)
+                val conversations = db.conversationDao().getAllConversationsSync()
+                val exportContent = if (formatJson) {
+                    val jsonArray = org.json.JSONArray()
+                    for (conv in conversations) {
+                        val messages = db.messageDao().getMessagesForConversationSync(conv.id)
+                        val convObj = org.json.JSONObject()
+                        convObj.put("title", conv.title)
+                        convObj.put("createdAt", conv.createdAt)
+                        convObj.put("isArchived", conv.isArchived)
+                        
+                        val msgArray = org.json.JSONArray()
+                        for (msg in messages) {
+                            val msgObj = org.json.JSONObject()
+                            msgObj.put("role", msg.role)
+                            msgObj.put("content", msg.content)
+                            msgObj.put("timestamp", msg.timestamp)
+                            msgArray.put(msgObj)
+                        }
+                        convObj.put("messages", msgArray)
+                        jsonArray.put(convObj)
+                    }
+                    jsonArray.toString(2)
+                } else {
+                    val sb = java.lang.StringBuilder()
+                    for (conv in conversations) {
+                        sb.append("========================================\n")
+                        sb.append("Conversation: ${conv.title}\n")
+                        sb.append("Created At: ${conv.createdAt}\n")
+                        sb.append("========================================\n\n")
+                        val messages = db.messageDao().getMessagesForConversationSync(conv.id)
+                        for (msg in messages) {
+                            val roleLabel = if (msg.role.uppercase() == "USER") "User" else "Nabih AI"
+                            sb.append("[$roleLabel]: ${msg.content}\n\n")
+                        }
+                        sb.append("\n\n")
+                    }
+                    sb.toString()
+                }
+
+                val fileName = "nabih_ai_export_${System.currentTimeMillis()}." + (if (formatJson) "json" else "txt")
+                val exportFile = java.io.File(context.cacheDir, fileName)
+                exportFile.writeText(exportContent)
+
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.provider",
+                    exportFile
+                )
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onComplete(uri)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ExportSettings", "Failed to export", e)
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onComplete(null)
+                }
+            }
+        }
+    }
+
+    private fun getDirSize(dir: java.io.File?): Long {
+        if (dir == null || !dir.exists()) return 0L
+        if (dir.isFile) return dir.length()
+        var size = 0L
+        val files = dir.listFiles() ?: return 0L
+        for (file in files) {
+            size += if (file.isDirectory) getDirSize(file) else file.length()
+        }
+        return size
+    }
+
+    private fun formatSize(size: Long): String {
+        if (size <= 0) return "0.0 B"
+        val units = arrayOf("B", "KB", "MB", "GB", "TB")
+        val digitGroups = (Math.log10(size.toDouble()) / Math.log10(1024.0)).toInt()
+        return String.format(java.util.Locale.US, "%.1f %s", size / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+    }
+
+    private fun deleteDirContent(dir: java.io.File?): Boolean {
+        if (dir == null || !dir.exists()) return true
+        var success = true
+        val files = dir.listFiles() ?: return true
+        for (file in files) {
+            success = if (file.isDirectory) {
+                deleteDirContent(file) && file.delete() && success
+            } else {
+                file.delete() && success
+            }
+        }
+        return success
     }
 }

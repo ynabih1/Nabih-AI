@@ -101,5 +101,7 @@ data class AppSettings(
     val memoryEnabled: Boolean = true,
     val saveHistory: Boolean = true,
     val notificationsEnabled: Boolean = true,
-    val completionNotifications: Boolean = true
+    val completionNotifications: Boolean = true,
+    val remindersEnabled: Boolean = true,
+    val onboardingCompleted: Boolean = false
 )

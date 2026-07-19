@@ -377,55 +377,66 @@ object AiProviderFactory {
 
 // --- 6. Unified Error Handling System ---
 object AiErrorTranslator {
-    fun translate(throwable: Throwable, isArabic: Boolean = false): String {
-        return when (throwable) {
-            is SocketTimeoutException -> {
-                if (isArabic) "انتهت مهلة الاتصال بالخادم. يرجى المحاولة مرة أخرى لاحقاً."
-                else "Connection timed out. Please try again later."
-            }
-            is UnknownHostException, is IOException -> {
-                if (isArabic) "فشل الاتصال بالإنترنت. يرجى التحقق من اتصالك والمحاولة مرة أخرى."
-                else "Network failure. Please check your internet connection and try again."
-            }
-            is HttpException -> {
-                val code = throwable.code()
-                val message = throwable.message()
-                when (code) {
-                    400 -> {
-                        if (isArabic) "طلب غير صالح (400). يرجى التحقق من المدخلات أو تكوين النموذج."
-                        else "Bad request (400). Please check your input parameters or model configuration."
-                    }
-                    401, 403 -> {
-                        if (isArabic) "مفتاح API غير صالح أو غير مصرح به (401/403). يرجى التحقق من الإعدادات."
-                        else "Unauthorized or invalid API Key (401/403). Please verify your key in Settings."
-                    }
-                    404 -> {
-                        if (isArabic) "النموذج أو الخدمة المطلوبة غير موجودة (404)."
-                        else "The requested model or endpoint was not found (404)."
-                    }
-                    408 -> {
-                        if (isArabic) "انتهت مهلة طلب الخادم (408)."
-                        else "Request timeout (408)."
-                    }
-                    429 -> {
-                        if (isArabic) "تم تجاوز حد الطلبات المسموح به (429). يرجى الانتظار قليلاً قبل المحاولة."
-                        else "Rate limit exceeded (429). Please wait a moment before trying again."
-                    }
-                    500, 502, 503, 504 -> {
-                        if (isArabic) "خطأ داخلي في خادم الخدمة ($code). يرجى المحاولة لاحقاً."
-                        else "Service internal error ($code). The AI provider might be experiencing issues. Please try again later."
-                    }
-                    else -> {
-                        if (isArabic) "خطأ غير متوقع من المزود ($code): $message"
-                        else "Unexpected provider error ($code): $message"
+    fun mapApiErrorToUserMessage(code: Int, provider: String): String {
+        val providerNameAr = when (provider.lowercase()) {
+            "gemini", "google" -> "Gemini"
+            "claude", "anthropic" -> "Claude"
+            "chatgpt", "openai" -> "ChatGPT"
+            "nabih", "nabih-ultra" -> "Nabih Ultra"
+            else -> provider
+        }
+        return when (code) {
+            400 -> "حدث خطأ في تنسيق الطلب، حاول مرة أخرى"
+            401, 403 -> "مفتاح API غير صالح أو منتهي الصلاحية، تحقق من إعدادات المفاتيح"
+            429 -> "تم تجاوز الحد المسموح من الطلبات لهذا المزود، حاول لاحقاً أو استخدم موديل آخر"
+            500, 502, 503, 504 -> "خدمة [$providerNameAr] غير متاحة مؤقتاً، حاول مرة أخرى بعد قليل"
+            -1 -> "استغرق الرد وقتاً أطول من المتوقع، تحقق من اتصالك وحاول مرة أخرى"
+            else -> "حدث خطأ غير متوقع ($code) أثناء الاتصال بـ $providerNameAr، يرجى المحاولة لاحقاً."
+        }
+    }
+
+    fun translate(throwable: Throwable, provider: String = "الذكاء الاصطناعي", isArabic: Boolean = false): String {
+        if (!isArabic) {
+            return when (throwable) {
+                is SocketTimeoutException -> "Connection timed out. Please try again later."
+                is UnknownHostException, is IOException -> "Network failure. Please check your internet connection and try again."
+                is HttpException -> {
+                    when (throwable.code()) {
+                        400 -> "Bad request (400). Please check your input parameters or model configuration."
+                        401, 403 -> "Unauthorized or invalid API Key (401/403). Please verify your key in Settings."
+                        429 -> "Rate limit exceeded (429). Please wait a moment before trying again."
+                        500, 502, 503, 504 -> "Service internal error (${throwable.code()}). Please try again later."
+                        else -> "Unexpected provider error (${throwable.code()})."
                     }
                 }
+                else -> throwable.localizedMessage ?: throwable.message ?: "An unknown error occurred."
+            }
+        }
+        return when (throwable) {
+            is SocketTimeoutException -> {
+                mapApiErrorToUserMessage(-1, provider)
+            }
+            is UnknownHostException, is IOException -> {
+                "فشل الاتصال بالإنترنت. يرجى التحقق من اتصالك والمحاولة مرة أخرى."
+            }
+            is HttpException -> {
+                mapApiErrorToUserMessage(throwable.code(), provider)
             }
             else -> {
-                throwable.localizedMessage ?: throwable.message ?: (
-                    if (isArabic) "حدث خطأ غير معروف أثناء الاتصال بالمزود."
-                    else "An unknown error occurred while communicating with the provider."
-                )
+                val msg = throwable.localizedMessage ?: throwable.message ?: ""
+                if (msg.contains("429")) {
+                    mapApiErrorToUserMessage(429, provider)
+                } else if (msg.contains("401") || msg.contains("403")) {
+                    mapApiErrorToUserMessage(401, provider)
+                } else if (msg.contains("400")) {
+                    mapApiErrorToUserMessage(400, provider)
+                } else if (msg.contains("500") || msg.contains("502") || msg.contains("503") || msg.contains("504")) {
+                    mapApiErrorToUserMessage(500, provider)
+                } else if (msg.contains("timeout") || msg.contains("Timeout") || msg.contains("SocketTimeout")) {
+                    mapApiErrorToUserMessage(-1, provider)
+                } else {
+                    msg.ifBlank { "حدث خطأ غير معروف أثناء الاتصال بالمزود." }
+                }
             }
         }
     }
@@ -452,7 +463,17 @@ object AiRouter {
             ApiProvider.ANTHROPIC -> settings.anthropicApiKey
         }
 
-        if (currentApiKey.isBlank() && providerType != ApiProvider.NABIH && providerType != ApiProvider.GOOGLE) {
+        val isGeminiRequest = providerType == ApiProvider.GOOGLE || providerType == ApiProvider.NABIH
+        if (isGeminiRequest && (currentApiKey.isBlank() || currentApiKey == "MY_GEMINI_API_KEY" || currentApiKey.contains("YOUR_") || currentApiKey.contains("PLACEHOLDER"))) {
+            val missingKeyMsg = if (isArabic) {
+                "لم يتم تكوين مفتاح Gemini بشكل صحيح، يرجى مراجعة إعدادات API"
+            } else {
+                "Gemini API key is not configured correctly, please check your API settings."
+            }
+            throw Exception(missingKeyMsg)
+        }
+
+        if (currentApiKey.isBlank() && !isGeminiRequest) {
             val missingKeyMsg = if (isArabic) {
                 "مفتاح API مطلوب: مفتاح ${providerType.displayName} غير موجود. يرجى إضافته في الإعدادات."
             } else {
@@ -462,7 +483,6 @@ object AiRouter {
         }
 
         val modelsToTry = mutableListOf<String>()
-        val isGeminiRequest = providerType == ApiProvider.GOOGLE || providerType == ApiProvider.NABIH
         if (isGeminiRequest) {
             val requestedId = if (registryModel.id == "nabih-ultra") "gemini-2.5-pro" else registryModel.id
             modelsToTry.add(requestedId)
@@ -532,7 +552,7 @@ object AiRouter {
         }
 
         if (!success) {
-            val translatedError = lastException?.let { AiErrorTranslator.translate(it, isArabic) }
+            val translatedError = lastException?.let { AiErrorTranslator.translate(throwable = it, isArabic = isArabic) }
                 ?: (if (isArabic) "فشلت عملية الاتصال بمزود الذكاء الاصطناعي." else "Failed to connect to AI provider.")
             throw Exception(translatedError)
         }

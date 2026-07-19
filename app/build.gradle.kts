@@ -36,6 +36,23 @@ android {
         }
         if (geminiKey.isNullOrEmpty()) geminiKey = props.getProperty("GEMINI_API_KEY") ?: ""
     }
+
+    if (geminiKey.isNullOrEmpty() || 
+        geminiKey == "MY_GEMINI_API_KEY" || 
+        geminiKey.contains("YOUR_") || 
+        geminiKey.contains("PLACEHOLDER")) {
+        throw GradleException(
+            "\n=====================================================================================\n" +
+            "BUILD ERROR: Gemini API Key is missing or invalid!\n" +
+            "To build this project outside of AI Studio, you MUST configure a valid Gemini API Key.\n\n" +
+            "Please follow these steps:\n" +
+            "1. Copy the file '.env.example' in the project root to '.env'\n" +
+            "2. Open the '.env' file and replace 'MY_GEMINI_API_KEY' with your actual Gemini API Key:\n" +
+            "   GEMINI_API_KEY=AIzaSy...\n\n" +
+            "This validation prevents compiling a non-functional build with placeholder keys.\n" +
+            "====================================================================================="
+        )
+    }
     buildConfigField("String", "GEMINI_API_KEY", "\"${geminiKey}\"")
   }
 
@@ -105,6 +122,7 @@ dependencies {
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.graphics)
+  implementation(libs.androidx.compose.ui.text.google.fonts)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.core.ktx)
   // implementation(libs.androidx.datastore.preferences)
@@ -118,13 +136,15 @@ dependencies {
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
   implementation(libs.firebase.appcheck.recaptcha)
+  implementation(libs.firebase.auth)
+  implementation(libs.kotlinx.coroutines.play.services)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
   // Commented out Google Sign-In libraries
-  // implementation(libs.play.services.auth)
+  implementation(libs.play.services.auth)
   implementation(libs.androidx.security.crypto)
   // implementation(libs.androidx.credentials)
   // implementation(libs.androidx.credentials.play.services.auth)

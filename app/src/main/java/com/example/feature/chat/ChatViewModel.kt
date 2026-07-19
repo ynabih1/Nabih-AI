@@ -4,6 +4,7 @@ import com.example.core.database.Message
 import com.example.core.database.AttachmentItem
 import com.example.core.model.AiModel
 import com.example.feature.settings.SettingsRepository
+import com.example.core.utils.NetworkMonitor
 import androidx.lifecycle.SavedStateHandle
 
 import android.net.Uri
@@ -34,8 +35,46 @@ sealed interface ChatUiState {
 class ChatViewModel(
     private val savedStateHandle: SavedStateHandle,
     private val chatRepository: ChatRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val networkMonitor: NetworkMonitor
 ) : ViewModel() {
+
+    data class FallbackDialogState(
+        val show: Boolean = false,
+        val failedModel: AiModel = AiModel.NABIH_ULTRA,
+        val suggestedModel: AiModel = AiModel.NABIH_ULTRA,
+        val conversationId: String = ""
+    )
+
+    private val _fallbackDialogState = MutableStateFlow(FallbackDialogState())
+    val fallbackDialogState: StateFlow<FallbackDialogState> = _fallbackDialogState.asStateFlow()
+
+    fun acceptFallback() {
+        val state = _fallbackDialogState.value
+        if (!state.show) return
+        _fallbackDialogState.value = FallbackDialogState()
+        
+        viewModelScope.launch {
+            val convId = state.conversationId
+            val conv = chatRepository.getConversationById(convId)
+            if (conv != null) {
+                chatRepository.updateConversation(conv.copy(modelId = state.suggestedModel.id))
+            }
+            selectModel(state.suggestedModel)
+            retryLastResponse()
+        }
+    }
+
+    fun dismissFallback() {
+        _fallbackDialogState.value = FallbackDialogState()
+    }
+
+    val isOnline: StateFlow<Boolean> = networkMonitor.isOnline
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = networkMonitor.isCurrentlyOnline()
+        )
 
     private val _activeConversationId = MutableStateFlow<String?>(null)
     val activeConversationId: StateFlow<String?> = _activeConversationId.asStateFlow()
@@ -158,6 +197,7 @@ class ChatViewModel(
 
     fun selectModel(model: AiModel) {
         _selectedModel.value = model
+        settingsRepository.updateDefaultModel(model)
         val convId = _activeConversationId.value ?: return
         viewModelScope.launch {
             val conv = chatRepository.getConversationById(convId)
@@ -364,9 +404,7 @@ class ChatViewModel(
                     }
                     _currentStreamingResponse.value = ""
                 }.catch { e ->
-                    _isGenerating.value = false
-                    _currentStreamingResponse.value = ""
-                    saveMessage(convId, "model", "An error occurred: ${e.localizedMessage}. Please try again.")
+                    handleError(e, convId)
                 }.collect { chunk ->
                     _currentStreamingResponse.value = chunk
                 }
@@ -382,8 +420,8 @@ class ChatViewModel(
 
             // Remove last model response if exists
             val lastMsg = messages.lastOrNull()
-            if (lastMsg != null && lastMsg.role == "model" && lastMsg.content.startsWith("An error occurred")) {
-                // We should actually just delete the last error message from the DB using a new DAO method if we had one. But we don't. We'll just leave it or ignore it.
+            if (lastMsg != null && lastMsg.role == "model" && (lastMsg.content.startsWith("An error occurred") || lastMsg.content.startsWith("API_ERROR:") || lastMsg.content.startsWith("حدث خطأ:") || lastMsg.content.startsWith("Error:"))) {
+                chatRepository.deleteMessageById(lastMsg.id)
             }
             
             // To properly retry, we will just start generating again with the existing context.
@@ -420,9 +458,7 @@ class ChatViewModel(
                     }
                     _currentStreamingResponse.value = ""
                 }.catch { e ->
-                    _isGenerating.value = false
-                    _currentStreamingResponse.value = ""
-                    saveMessage(convId, "model", "An error occurred: ${e.localizedMessage}. Please try again.")
+                    handleError(e, convId)
                 }.collect { chunk ->
                     _currentStreamingResponse.value = chunk
                 }
@@ -512,13 +548,54 @@ class ChatViewModel(
                     }
                     _currentStreamingResponse.value = ""
                 }.catch { e ->
-                    _isGenerating.value = false
-                    _currentStreamingResponse.value = ""
-                    saveMessage(convId, "model", "An error occurred: ${e.localizedMessage}. Please try again.")
+                    handleError(e, convId)
                 }.collect { chunk ->
                     _currentStreamingResponse.value = chunk
                 }
             }
+        }
+    }
+
+    private fun handleError(e: Throwable, convId: String) {
+        _isGenerating.value = false
+        _currentStreamingResponse.value = ""
+        val currentModelObj = _selectedModel.value
+        
+        // Log error locally in Room error_logs
+        viewModelScope.launch {
+            chatRepository.insertErrorLog(
+                errorType = e.javaClass.simpleName ?: "Exception",
+                provider = currentModelObj.provider.name
+            )
+        }
+
+        // Translate/Map API Error code to user friendly message
+        val isArabic = settingsRepository.settings.value.language == com.example.core.model.AppLanguage.ARABIC
+        val userMsg = com.example.core.network.AiErrorTranslator.translate(
+            throwable = e,
+            provider = currentModelObj.displayName,
+            isArabic = isArabic
+        )
+
+        // Save with "API_ERROR:" prefix so the UI knows to render it beautifully as an error bubble with retry action
+        saveMessage(convId, "model", "API_ERROR: $userMsg")
+
+        // Trigger fallback model proposal dialog if 429 or 500 error occurs
+        val isServerOrRateLimit = if (e is retrofit2.HttpException) {
+            e.code() == 429 || e.code() in 500..599
+        } else {
+            val msg = e.localizedMessage ?: e.message ?: ""
+            msg.contains("429") || msg.contains("500") || msg.contains("502") || msg.contains("503") || msg.contains("504")
+        }
+
+        if (isServerOrRateLimit) {
+            val suggestedModel = if (currentModelObj == AiModel.NABIH_ULTRA) AiModel.GEMINI else AiModel.NABIH_ULTRA
+            _fallbackDialogState.value = FallbackDialogState(
+                show = true,
+                failedModel = currentModelObj,
+                suggestedModel = suggestedModel,
+                conversationId = convId
+            )
         }
     }
 

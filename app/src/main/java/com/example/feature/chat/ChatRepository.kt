@@ -8,6 +8,8 @@ import com.example.core.database.MemoryDao
 import com.example.core.database.Message
 import com.example.core.database.MessageDao
 import com.example.core.database.AttachmentItem
+import com.example.core.database.ErrorLog
+import com.example.core.database.ErrorLogDao
 import com.example.core.model.AiModel
 import com.example.core.model.ApiProvider
 import com.example.core.network.ClaudeMessage
@@ -45,6 +47,7 @@ class ChatRepository(
     private val conversationDao: ConversationDao,
     private val messageDao: MessageDao,
     private val memoryDao: MemoryDao,
+    private val errorLogDao: ErrorLogDao,
     private val settingsRepository: SettingsRepository
 ) {
     private val responseCache = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -474,5 +477,9 @@ suspend fun duplicateConversation(originalId: String): String = withContext(Disp
             android.util.Log.e("ChatRepository", "Image Generation failed", e)
             null
         }
+    }
+
+    suspend fun insertErrorLog(errorType: String, provider: String) = withContext(Dispatchers.IO) {
+        errorLogDao.insertErrorLog(ErrorLog(errorType = errorType, provider = provider))
     }
 }
