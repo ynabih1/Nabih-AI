@@ -64,6 +64,23 @@ interface MessageDao {
 
     @Query("DELETE FROM messages")
     suspend fun deleteAllMessages()
+
+    @Query("""
+        SELECT 
+            m.id as messageId,
+            m.conversationId as conversationId,
+            c.title as conversationTitle,
+            m.imageUri as imageUri,
+            m.documentUri as documentUri,
+            m.documentName as documentName,
+            m.timestamp as timestamp
+        FROM messages m
+        INNER JOIN conversations c ON m.conversationId = c.id
+        WHERE (m.imageUri IS NOT NULL AND m.imageUri != '') 
+           OR (m.documentUri IS NOT NULL AND m.documentUri != '')
+        ORDER BY m.timestamp DESC
+    """)
+    fun getAttachmentsWithConversations(): Flow<List<AttachmentItem>>
 }
 
 @Dao

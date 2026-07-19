@@ -93,6 +93,7 @@ data class AppSettings(
     val userName: String = "",
     val profilePictureUri: String = "",
     val personalInfo: String = "",
+    val userHandle: String = "",
     val microsoftEmail: String = "",
     val microsoftName: String = "",
     val biometricsEnabled: Boolean = false,

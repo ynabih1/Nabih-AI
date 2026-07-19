@@ -45,7 +45,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun SettingsScreen(
     settingsViewModel: SettingsViewModel,
-    onClearChatHistory: () -> Unit = {},
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -80,11 +79,9 @@ fun SettingsScreen(
             contentPadding = PaddingValues(top = 16.dp, bottom = 48.dp)
         ) {
             item {
-                AiConfigurationSection(settings, settingsViewModel, isArabic, snackbarHostState)
+                PreferencesSection(settings, settingsViewModel, isArabic)
             }
-            item {
-                StorageSettingsSection(isArabic, onClearChatHistory)
-            }
+
         }
     }
 }
@@ -185,7 +182,7 @@ fun AiConfigurationSection(settings: AppSettings, viewModel: SettingsViewModel, 
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text(
                                 text = name,
                                 fontSize = 16.sp,
@@ -238,17 +235,17 @@ fun AiConfigurationSection(settings: AppSettings, viewModel: SettingsViewModel, 
                                 Icon(
                                     imageVector = if (isKeyVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
                                     contentDescription = null,
-                                    tint = notConnectedGray
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = cardWhite,
-                            unfocusedContainerColor = cardWhite,
-                            focusedBorderColor = primaryBlue,
-                            unfocusedBorderColor = borderLight,
-                            focusedTextColor = textDark,
-                            unfocusedTextColor = textDark
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -282,9 +279,9 @@ fun AiConfigurationSection(settings: AppSettings, viewModel: SettingsViewModel, 
                             },
                             enabled = !isVerifying && tempKey.isNotBlank(),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
                                 contentColor = primaryBlue,
-                                disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f).copy(alpha = 0.5f),
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.5f),
                                 disabledContentColor = primaryBlue.copy(alpha = 0.5f)
                             ),
                             elevation = ButtonDefaults.buttonElevation(0.dp),
@@ -419,57 +416,47 @@ suspend fun testApiKeyConnection(provider: String, key: String): Boolean = kotli
 }
 
 
-
 @Composable
-fun StorageSettingsSection(isArabic: Boolean, onClearChatHistory: () -> Unit) {
-    val context = LocalContext.current
-    var showClearDialog by remember { mutableStateOf(false) }
-
-    SettingsSectionCard(if (isArabic) "سجل المحادثات والبيانات" else "Conversation Data & Storage", Icons.Rounded.Storage) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(if (isArabic) "سجل المحادثات" else "Conversation Data", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                    Text(if (isArabic) "حذف كل المحادثات المحفوظة محلياً بشكل نهائي." else "Permanently wipe all offline conversation records.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Button(
-                    onClick = { showClearDialog = true },
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer),
-                    modifier = Modifier.minimumInteractiveComponentSize()
-                ) {
-                    Text(if (isArabic) "حذف المحادثات" else "Wipe Chats")
+fun PreferencesSection(settings: AppSettings, viewModel: SettingsViewModel, isArabic: Boolean) {
+    SettingsSectionCard(
+        title = if (isArabic) "التفضيلات" else "Preferences",
+        icon = Icons.Rounded.Settings
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            // Language
+            Text(if (isArabic) "اللغة" else "Language", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    AppLanguage.ENGLISH to "English",
+                    AppLanguage.ARABIC to "العربية"
+                ).forEach { (lang, label) ->
+                    val isSelected = settings.language == lang
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { viewModel.updateLanguage(lang) },
+                        label = { Text(label) },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
-        }
-
-        if (showClearDialog) {
-            AlertDialog(
-                onDismissRequest = { showClearDialog = false },
-                title = { Text(if (isArabic) "تأكيد مسح كافة المحادثات" else "Wipe All Chats?", fontWeight = FontWeight.Bold) },
-                text = { Text(if (isArabic) "هل أنت متأكد تماماً أنك تريد حذف كافة سجلات المحادثات المخزنة محلياً؟ لا يمكن التراجع عن هذا الإجراء." else "Are you absolutely certain you want to purge all local conversation database logs? This action is permanent and cannot be undone.") },
-                confirmButton = {
-                    Button(
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                        onClick = {
-                            showClearDialog = false
-                            onClearChatHistory()
-                            Toast.makeText(context, if (isArabic) "تم حذف كافة المحادثات" else "All conversations cleared", Toast.LENGTH_SHORT).show()
-                        }
-                    ) {
-                        Text(if (isArabic) "حذف الكل" else "Confirm Wipe")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showClearDialog = false }) {
-                        Text(if (isArabic) "إلغاء" else "Cancel")
-                    }
+            
+            // Theme
+            Text(if (isArabic) "المظهر" else "Theme", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    AppTheme.LIGHT to if (isArabic) "فاتح" else "Light",
+                    AppTheme.DARK to if (isArabic) "داكن" else "Dark",
+                    AppTheme.SYSTEM to if (isArabic) "النظام" else "System"
+                ).forEach { (theme, label) ->
+                    val isSelected = settings.theme == theme
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { viewModel.updateTheme(theme) },
+                        label = { Text(label) },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
-            )
+            }
         }
     }
 }

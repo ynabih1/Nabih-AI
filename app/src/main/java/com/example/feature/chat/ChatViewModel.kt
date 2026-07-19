@@ -1,6 +1,7 @@
 package com.example.feature.chat
 
 import com.example.core.database.Message
+import com.example.core.database.AttachmentItem
 import com.example.core.model.AiModel
 import com.example.feature.settings.SettingsRepository
 import androidx.lifecycle.SavedStateHandle
@@ -97,6 +98,13 @@ class ChatViewModel(
     // Internet Search Enable Flag
     private val _searchEnabled = MutableStateFlow(false)
     val searchEnabled: StateFlow<Boolean> = _searchEnabled.asStateFlow()
+
+    val attachments: StateFlow<List<AttachmentItem>> = chatRepository.getAttachments()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     private var activeConversationMessagesFlow: Job? = null
     private var streamingJob: Job? = null
@@ -523,6 +531,14 @@ class ChatViewModel(
                 content = content
             )
             chatRepository.insertMessage(msg)
+        }
+    }
+
+    fun getFileSizeString(uriString: String): String {
+        return try {
+            chatRepository.getFileSizeString(android.net.Uri.parse(uriString))
+        } catch (e: Exception) {
+            ""
         }
     }
 }

@@ -7,6 +7,7 @@ import com.example.core.database.FolderDao
 import com.example.core.database.MemoryDao
 import com.example.core.database.Message
 import com.example.core.database.MessageDao
+import com.example.core.database.AttachmentItem
 import com.example.core.model.AiModel
 import com.example.core.model.ApiProvider
 import com.example.core.network.ClaudeMessage
@@ -62,6 +63,9 @@ class ChatRepository(
 
     fun getMessagesForConversation(conversationId: String): Flow<List<Message>> =
         messageDao.getMessagesForConversation(conversationId)
+
+    fun getAttachments(): Flow<List<AttachmentItem>> =
+        messageDao.getAttachmentsWithConversations()
 
     // --- Write Database Operations ---
 

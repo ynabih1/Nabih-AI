@@ -34,9 +34,9 @@ class SettingsViewModel(
         settingsRepository.updateTheme(theme)
     }
 
-    fun updateProfile(name: String, pictureUri: String, info: String, newEmail: String = "") {
+    fun updateProfile(name: String, pictureUri: String, info: String, newEmail: String = "", handle: String = "") {
         viewModelScope.launch {
-            settingsRepository.updateProfile(name, pictureUri, info, newEmail)
+            settingsRepository.updateProfile(name, pictureUri, info, newEmail, handle)
         }
     }
 

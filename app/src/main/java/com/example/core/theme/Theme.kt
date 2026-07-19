@@ -1,6 +1,7 @@
 package com.example.core.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -16,7 +17,10 @@ private val LightColorScheme = lightColorScheme(
     outline = LightOutline,
     outlineVariant = LightOutlineVariant,
     surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightOnSurfaceVariant
+    onSurfaceVariant = LightOnSurfaceVariant,
+    surfaceContainer = Color(0xFFF1F1F2),
+    surfaceContainerLow = Color(0xFFF7F7F8),
+    surfaceContainerHigh = Color(0xFFE5E5E5)
 )
 
 private val DarkColorScheme = darkColorScheme(
@@ -28,7 +32,10 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = DarkOnSurface,
     outline = DarkOutline,
     surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = DarkOnSurfaceVariant
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    surfaceContainer = Color(0xFF2D3748),
+    surfaceContainerLow = Color(0xFF1F2937),
+    surfaceContainerHigh = Color(0xFF4A5568)
 )
 
 @Composable

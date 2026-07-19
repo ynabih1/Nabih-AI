@@ -11,6 +11,7 @@ import com.example.feature.chat.ChatViewModel
 import com.example.feature.chat.HomeViewModel
 import com.example.feature.chat.MainScreen
 import com.example.feature.settings.SettingsScreen
+import com.example.feature.settings.ApiKeysScreen
 import com.example.feature.settings.SettingsViewModel
 import com.example.feature.tools.FilesScreen
 import com.example.feature.tools.HelpScreen
@@ -66,7 +67,12 @@ class MainActivity : ComponentActivity() {
 
             // Dynamically provide Language Alignment (RTL / LTR) across all layouts
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                NabihTheme(darkTheme = settings.theme == com.example.core.model.AppTheme.DARK) {
+                val darkTheme = when (settings.theme) {
+                    com.example.core.model.AppTheme.DARK -> true
+                    com.example.core.model.AppTheme.LIGHT -> false
+                    com.example.core.model.AppTheme.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+                }
+                NabihTheme(darkTheme = darkTheme) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                         val navController = rememberNavController()
 
@@ -105,11 +111,6 @@ class MainActivity : ComponentActivity() {
                             composable("settings") {
                                 SettingsScreen(
                                     settingsViewModel = settingsViewModel,
-                                    onClearChatHistory = {
-                                        settingsViewModel.viewModelScope.launch {
-                                            appContainer.chatRepository.deleteAllConversations()
-                                        }
-                                    },
 
                                     onNavigateBack = {
                                         navController.popBackStack()
@@ -117,11 +118,23 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
+                            composable("api_keys") {
+                                ApiKeysScreen(
+                                    settingsViewModel = settingsViewModel,
+                                    onNavigateBack = {
+                                        navController.popBackStack()
+                                    }
+                                )
+                            }
                             composable("saved") {
                                 SavedChatsScreen(onNavigateBack = { navController.popBackStack() }, isArabic = settings.language == AppLanguage.ARABIC)
                             }
                             composable("files") {
-                                FilesScreen(onNavigateBack = { navController.popBackStack() }, isArabic = settings.language == AppLanguage.ARABIC)
+                                FilesScreen(
+                                    chatViewModel = chatViewModel,
+                                    onNavigateBack = { navController.popBackStack() },
+                                    isArabic = settings.language == AppLanguage.ARABIC
+                                )
                             }
                             composable("account") {
                                 AccountScreen(

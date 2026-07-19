@@ -1,5 +1,9 @@
 package com.example.feature.chat
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+
+
 
 
 import com.example.R
@@ -28,8 +32,11 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.LazyColumn
@@ -398,6 +405,7 @@ fun MainScreen(
     
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(selectedModel, settings) {
         if (selectedModel.id != com.example.core.model.AiModel.NABIH_ULTRA.id) {
@@ -455,6 +463,7 @@ fun MainScreen(
         }
     ) {
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
                 TopAppBar(
@@ -474,172 +483,14 @@ fun MainScreen(
                             Icon(Icons.Rounded.Menu, contentDescription = "Menu")
                         }
                     },
-                    actions = {
-                        val hasApiKey = settings.googleApiKey.isNotEmpty() || 
-                                        settings.nabihApiKey.isNotEmpty() || 
-                                        settings.openaiApiKey.isNotEmpty() || 
-                                        settings.anthropicApiKey.isNotEmpty()
-                                        
-                        if (hasApiKey) {
-                            var modelMenuExpanded by remember { mutableStateOf(false) }
-                            Box {
-                                TextButton(
-                                    onClick = { modelMenuExpanded = true },
-                                    modifier = Modifier.padding(end = 4.dp).minimumInteractiveComponentSize(),
-                                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                ) {
-                                    Text(text = selectedModel.displayName.split(" ").firstOrNull() ?: selectedModel.displayName, style = MaterialTheme.typography.labelLarge)
-                                    Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null)
-                                }
-                                DropdownMenu(
-                                    expanded = modelMenuExpanded,
-                                    onDismissRequest = { modelMenuExpanded = false },
-                                    modifier = Modifier.width(320.dp).background(MaterialTheme.colorScheme.surface)
-                                ) {
-                                    val registryModels = com.example.core.model.ModelRegistry.getModels(context).filter { model ->
-                                        when (model.provider) {
-                                            com.example.core.model.ApiProvider.NABIH -> true
-                                            com.example.core.model.ApiProvider.GOOGLE -> {
-                                                settings.googleApiKey.isNotEmpty() || 
-                                                 settings.nabihApiKey.isNotEmpty()
-                                            }
-                                            com.example.core.model.ApiProvider.OPENAI -> settings.openaiApiKey.isNotEmpty()
-                                            com.example.core.model.ApiProvider.ANTHROPIC -> settings.anthropicApiKey.isNotEmpty()
-                                        }
-                                    }
-                                    
-                                    var isRefreshing by remember { mutableStateOf(false) }
-                                    val coroutineScope = rememberCoroutineScope()
-                                    
-                                    DropdownMenuItem(
-                                        text = {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                if (isRefreshing) {
-                                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                                } else {
-                                                    Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                                }
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(if (isArabic) "تحديث النماذج تلقائياً" else "Sync Model Registry", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                            }
-                                        },
-                                        onClick = {
-                                            if (!isRefreshing) {
-                                                isRefreshing = true
-                                                coroutineScope.launch {
-                                                    com.example.core.model.ModelRegistry.syncAndRefresh(context,
-                                                        onSuccess = {
-                                                            isRefreshing = false
-                                                            android.widget.Toast.makeText(context, if (isArabic) "تم تحديث النماذج!" else "Model Registry synced!", android.widget.Toast.LENGTH_SHORT).show()
-                                                        },
-                                                        onFailure = {
-                                                            isRefreshing = false
-                                                        }
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    )
-                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                                    
-                                    registryModels.forEach { modelMetadata ->
-                                        val modelEnum = com.example.core.model.AiModel.values().find { it.id == modelMetadata.id } ?: com.example.core.model.AiModel.NABIH_ULTRA
-                                        val isLocked = false
-                                        DropdownMenuItem(
-                                            text = { 
-                                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        if (isLocked) {
-                                                            Icon(Icons.Rounded.Lock, contentDescription = "Locked", modifier = Modifier.size(16.dp).padding(end = 4.dp))
-                                                        } else {
-                                                            Icon(
-                                                                imageVector = if (modelMetadata.isDeprecated) Icons.Rounded.Warning else Icons.Rounded.Check,
-                                                                contentDescription = "Status",
-                                                                modifier = Modifier.size(16.dp).padding(end = 4.dp),
-                                                                tint = if (modelMetadata.isDeprecated) MaterialTheme.colorScheme.error 
-                                                                       else if (selectedModel.id == modelMetadata.id) MaterialTheme.colorScheme.primary 
-                                                                       else androidx.compose.ui.graphics.Color.Transparent
-                                                            )
-                                                        }
-                                                        Text(
-                                                            text = modelMetadata.displayName,
-                                                            fontWeight = FontWeight.SemiBold,
-                                                            color = if (isLocked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
-                                                        )
-                                                    }
-                                                    
-                                                    if (modelMetadata.isDeprecated) {
-                                                        Text(
-                                                            text = if (isArabic) "سيتوقف قريباً! البديل: ${modelMetadata.fallbackModelId}" else "Deprecated! Migrates to: ${modelMetadata.fallbackModelId}",
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            color = MaterialTheme.colorScheme.error,
-                                                            fontSize = 10.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            modifier = Modifier.padding(start = 16.dp)
-                                                        )
-                                                    } else if (modelMetadata.status == com.example.core.model.ModelStatus.MAINTENANCE) {
-                                                        Text(
-                                                            text = if (isArabic) "صيانة: غير متوفر مؤقتاً" else "Maintenance Mode",
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            color = androidx.compose.ui.graphics.Color(0xFFE65100),
-                                                            fontSize = 10.sp,
-                                                            modifier = Modifier.padding(start = 16.dp)
-                                                        )
-                                                    }
-                                                    
-                                                    Row(
-                                                        modifier = Modifier.padding(start = 16.dp, top = 4.dp),
-                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        val caps = modelMetadata.capabilities
-                                                        if (caps.text) Icon(Icons.Rounded.Notes, "Text", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
-                                                        if (caps.vision) Icon(Icons.Rounded.Visibility, "Vision", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
-                                                        if (caps.audio) Icon(Icons.Rounded.Mic, "Audio", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
-                                                        if (caps.reasoning) Icon(Icons.Rounded.Lightbulb, "Reasoning", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
-                                                        if (caps.imageGeneration) Icon(Icons.Rounded.Image, "Image Gen", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
-                                                        if (caps.fileAnalysis) Icon(Icons.Rounded.Description, "File Analysis", modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
-                                                    }
-                                                }
-                                            },
-                                            onClick = {
-                                                if (isLocked) {
-                                                    android.widget.Toast.makeText(context, if (isArabic) "مفتاح API مطلوب" else "API Key Required", android.widget.Toast.LENGTH_SHORT).show()
-                                                } else {
-                                                    chatViewModel.selectModel(modelEnum)
-                                                    modelMenuExpanded = false
-                                                }
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        } else {
-                            TextButton(
-                                onClick = { },
-                                modifier = Modifier.padding(end = 4.dp).minimumInteractiveComponentSize(),
-                                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                ),
-                                enabled = false
-                            ) {
-                                Text(
-                                    text = "Nabih Ultra",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    },
+                    actions = {},
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
+                        containerColor = MaterialTheme.colorScheme.surface,
                         titleContentColor = MaterialTheme.colorScheme.onBackground
                     )
                 )
             },
-            containerColor = MaterialTheme.colorScheme.background
+            containerColor = MaterialTheme.colorScheme.surface
         ) { paddingValues ->
             Column(
                 modifier = Modifier
@@ -758,7 +609,12 @@ fun MainScreen(
                                         isStreaming = false,
                                         onRetry = { chatViewModel.retryLastResponse() },
                                         onDelete = { chatViewModel.deleteMessage(message.id) },
-                                        onEdit = { newContent -> chatViewModel.editUserMessageAndRegenerate(message.id, newContent) }
+                                        onEdit = { newContent -> chatViewModel.editUserMessageAndRegenerate(message.id, newContent) },
+                                        onShowFeedbackSuccess = {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar(if (isArabic) "شكرًا لك على ملاحظاتك." else "Thank you for your feedback.")
+                                            }
+                                        }
                                     )
                                 }
                                 if (isGenerating) {
@@ -772,7 +628,12 @@ fun MainScreen(
                                             ),
                                             isArabic = isArabic,
                                             isStreaming = true,
-                                            isLoading = streamResponse.isEmpty()
+                                            isLoading = streamResponse.isEmpty(),
+                                            onShowFeedbackSuccess = {
+                                                scope.launch {
+                                                    snackbarHostState.showSnackbar(if (isArabic) "شكرًا لك على ملاحظاتك." else "Thank you for your feedback.")
+                                                }
+                                            }
                                         )
                                     }
                                 }
@@ -801,7 +662,7 @@ fun MainScreen(
                                             }
                                         }
                                     },
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
                                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                     shape = CircleShape,
                                     modifier = Modifier.size(44.dp)
@@ -1049,11 +910,24 @@ fun AiResponseToolbar(
     isArabic: Boolean,
     content: String,
     onDelete: () -> Unit,
-    onEditClick: () -> Unit
+    onEditClick: () -> Unit,
+    onShowFeedbackSuccess: () -> Unit
 ) {
     val context = LocalContext.current
     var reaction by remember { mutableStateOf<Boolean?>(null) } // true = like, false = dislike
-    
+    var showFeedbackSheet by remember { mutableStateOf(false) }
+
+    if (showFeedbackSheet) {
+        FeedbackBottomSheet(
+            isArabic = isArabic,
+            onDismiss = { showFeedbackSheet = false },
+            onSubmit = {
+                showFeedbackSheet = false
+                onShowFeedbackSuccess()
+            }
+        )
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1097,7 +971,11 @@ fun AiResponseToolbar(
         // Dislike Button
         IconButton(
             onClick = {
-                reaction = if (reaction == false) null else false
+                val newReaction = if (reaction == false) null else false
+                reaction = newReaction
+                if (newReaction == false) {
+                    showFeedbackSheet = true
+                }
             },
             modifier = Modifier.size(36.dp)
         ) {
@@ -1139,7 +1017,8 @@ fun MessageItem(
     isLoading: Boolean = false,
     onRetry: () -> Unit = {},
     onDelete: () -> Unit = {},
-    onEdit: (String) -> Unit = {}
+    onEdit: (String) -> Unit = {},
+    onShowFeedbackSuccess: () -> Unit = {}
 ) {
     val isUser = message.role == "user"
     val context = LocalContext.current
@@ -1154,7 +1033,7 @@ fun MessageItem(
         ) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
+                color = MaterialTheme.colorScheme.surface
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Top Bar
@@ -1286,10 +1165,10 @@ fun MessageItem(
         }
         
         val bubbleShape = RoundedCornerShape(
-            topStart = 16.dp,
-            topEnd = 16.dp,
-            bottomStart = if (isUser) 16.dp else 4.dp,
-            bottomEnd = if (isUser) 4.dp else 16.dp
+            topStart = 24.dp,
+            topEnd = 24.dp,
+            bottomStart = if (isUser) 24.dp else 4.dp,
+            bottomEnd = if (isUser) 4.dp else 24.dp
         )
         
         val formattedTime = remember(message.timestamp) {
@@ -1311,7 +1190,7 @@ fun MessageItem(
         ) {
             Surface(
                 shape = bubbleShape,
-                color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                color = if (isUser) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface,
                 border = if (!isUser) androidx.compose.foundation.BorderStroke(
                     width = 1.dp,
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
@@ -1450,14 +1329,7 @@ fun MessageItem(
                             },
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                         )
-                        DropdownMenuItem(
-                            text = { Text(if (isArabic) "تحديد النص" else "Select text", fontWeight = FontWeight.SemiBold) },
-                            leadingIcon = { Icon(Icons.Outlined.Article, null, tint = MaterialTheme.colorScheme.onSurface) },
-                            onClick = {
-                                showMenu = false
-                            },
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                        )
+
                         if (isUser) {
                             DropdownMenuItem(
                                 text = { Text(if (isArabic) "تعديل الرسالة" else "Edit message", fontWeight = FontWeight.SemiBold) },
@@ -1478,7 +1350,8 @@ fun MessageItem(
                     isArabic = isArabic,
                     content = message.content,
                     onDelete = onDelete,
-                    onEditClick = { showEditDialog = true }
+                    onEditClick = { showEditDialog = true },
+                    onShowFeedbackSuccess = onShowFeedbackSuccess
                 )
             }
         }
@@ -1567,6 +1440,7 @@ fun AttachmentMenuItem(
 
 // Capsule styling parameters with high fluid visual accents
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun BottomInputArea(
     isArabic: Boolean,
     text: String,
@@ -1586,6 +1460,8 @@ fun BottomInputArea(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var showAttachmentMenu by remember { mutableStateOf(false) }
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
 
     val docPicker = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
@@ -1674,18 +1550,18 @@ fun BottomInputArea(
         color = MaterialTheme.colorScheme.background,
         shadowElevation = 0.dp
     ) {
-        Column {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
             // Elegant Premium ChatGPT-style capsule layout
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 4.dp,
-                tonalElevation = 2.dp,
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(32.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                border = if (isFocused) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                shadowElevation = if (isFocused) 4.dp else 0.dp
             ) {
                 Column(
                     modifier = Modifier.fillMaxWidth()
@@ -1695,20 +1571,16 @@ fun BottomInputArea(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))
+                                .background(MaterialTheme.colorScheme.errorContainer)
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(
-                                    imageVector = Icons.Rounded.ErrorOutline,
-                                    contentDescription = "Error",
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(Icons.Rounded.ErrorOutline, contentDescription = "Error", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = attachError ?: "",
+                                    text = attachError,
                                     color = MaterialTheme.colorScheme.error,
                                     style = MaterialTheme.typography.bodyMedium,
                                     maxLines = 2,
@@ -1758,7 +1630,7 @@ fun BottomInputArea(
                                         ) {
                                             Text(
                                                 text = sizeStr,
-                                                color = Color.White,
+                                                color = Color(0xFFFAFAFA),
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier.align(Alignment.Center)
@@ -1795,7 +1667,7 @@ fun BottomInputArea(
                                             Icon(
                                                 imageVector = Icons.Rounded.Close,
                                                 contentDescription = "Remove",
-                                                tint = Color.White,
+                                                tint = Color(0xFFFAFAFA),
                                                 modifier = Modifier.size(12.dp)
                                             )
                                         }
@@ -1832,31 +1704,29 @@ fun BottomInputArea(
                                                     modifier = Modifier.size(20.dp)
                                                 )
                                             }
-
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = attachedDocName ?: "File",
+                                                    text = attachedDocName ?: "Document",
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
-                                                    color = MaterialTheme.colorScheme.onSurface
+                                                    fontWeight = FontWeight.Medium
                                                 )
-                                                val sizeStr = getUriSizeFormatted(context, attachedDocUri)
                                                 Text(
-                                                    text = sizeStr,
-                                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                                    text = getUriSizeFormatted(context, attachedDocUri),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             }
                                         }
-
+                                        
                                         // Upload progress overlay
                                         if (isAttaching) {
                                             Box(
                                                 modifier = Modifier
                                                     .fillMaxSize()
-                                                    .background(Color.Black.copy(alpha = 0.4f)),
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 CircularProgressIndicator(
@@ -1881,7 +1751,7 @@ fun BottomInputArea(
                                             Icon(
                                                 imageVector = Icons.Rounded.Close,
                                                 contentDescription = "Remove",
-                                                tint = Color.White,
+                                                tint = Color(0xFFFAFAFA),
                                                 modifier = Modifier.size(12.dp)
                                             )
                                         }
@@ -1895,7 +1765,8 @@ fun BottomInputArea(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(horizontal = 4.dp, vertical = 4.dp)
+                            .heightIn(min = 56.dp, max = 200.dp),
                         verticalAlignment = Alignment.Bottom
                     ) {
                         // Attachment Button with Custom popup anchoring
@@ -1903,15 +1774,15 @@ fun BottomInputArea(
                             IconButton(
                                 onClick = { showAttachmentMenu = true },
                                 modifier = Modifier
+                                    .padding(bottom = 8.dp)
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Add,
                                     contentDescription = "Attach",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(28.dp)
                                 )
                             }
 
@@ -1985,25 +1856,25 @@ fun BottomInputArea(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(horizontal = 12.dp)
-                                .heightIn(min = 50.dp, max = 200.dp),
+                                .padding(horizontal = 4.dp, vertical = 14.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
                             if (text.isEmpty()) {
                                 Text(
                                     text = if (isArabic) "الرد على Nabih AI" else "Message Nabih AI",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                                     style = MaterialTheme.typography.bodyLarge,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
-                            BasicTextField(
+                            androidx.compose.foundation.text.BasicTextField(
                                 value = text,
                                 onValueChange = onTextChange,
                                 modifier = Modifier.fillMaxWidth(),
                                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                                 cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                                maxLines = 8
+                                maxLines = 8,
+                                interactionSource = interactionSource
                             )
                         }
 
@@ -2017,7 +1888,8 @@ fun BottomInputArea(
                             transitionSpec = {
                                 scaleIn(animationSpec = tween(180)) togetherWith scaleOut(animationSpec = tween(180))
                             },
-                            label = "composer_action"
+                            label = "composer_action",
+                            modifier = Modifier.padding(bottom = 8.dp, end = 8.dp)
                         ) { state ->
                             when (state) {
                                 0 -> {
@@ -2032,7 +1904,7 @@ fun BottomInputArea(
                                             imageVector = Icons.Rounded.Stop,
                                             contentDescription = "Stop",
                                             tint = MaterialTheme.colorScheme.onError,
-                                            modifier = Modifier.size(22.dp)
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
                                 }
@@ -2079,214 +1951,106 @@ fun BottomInputArea(
     }
 }
 
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SwipeableConversationItem(
-    conversation: Conversation,
+fun ConversationItem(
+    conversation: com.example.core.database.Conversation,
     isSelected: Boolean,
     isArabic: Boolean,
-    onSelectConversation: (String) -> Unit,
+    onSelect: () -> Unit,
+    onTogglePin: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
-    onTogglePin: () -> Unit,
-    onToggleArchive: () -> Unit
+    modifier: Modifier = Modifier
 ) {
-    var offsetX by remember { mutableStateOf(0f) }
-    val animatedOffset by animateFloatAsState(targetValue = offsetX, label = "swipeOffset")
+    var showMenu by remember { mutableStateOf(false) }
+    val formattedTime = remember(conversation.updatedAt) {
+        val format = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
+        format.format(java.util.Date(conversation.updatedAt))
+    }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 2.dp)
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures(
-                    onDragEnd = {
-                        if (offsetX < -80f) {
-                            offsetX = -120f
-                        } else if (offsetX > 80f) {
-                            offsetX = 120f
-                        } else {
-                            offsetX = 0f
-                        }
-                    },
-                    onDragCancel = {
-                        offsetX = 0f
-                    },
-                    onHorizontalDrag = { change, dragAmount ->
-                        change.consume()
-                        offsetX = (offsetX + dragAmount).coerceIn(-140f, 140f)
-                    }
-                )
-            }
+    Surface(
+        onClick = onSelect,
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+        shape = RoundedCornerShape(16.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
     ) {
         Row(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    if (offsetX != 0f) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else Color.Transparent, 
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = if (offsetX < 0) Arrangement.End else Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (offsetX < 0) {
-                IconButton(onClick = {
-                    offsetX = 0f
-                    onRename()
-                }, modifier = Modifier.minimumInteractiveComponentSize()) {
-                    Icon(Icons.Rounded.Edit, contentDescription = "Rename", tint = MaterialTheme.colorScheme.primary)
-                }
-                IconButton(onClick = {
-                    offsetX = 0f
-                    onDelete()
-                }, modifier = Modifier.minimumInteractiveComponentSize()) {
-                    Icon(Icons.Rounded.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                }
-            } else {
-                IconButton(onClick = {
-                    offsetX = 0f
-                    onTogglePin()
-                }, modifier = Modifier.minimumInteractiveComponentSize()) {
-                    Icon(
-                        imageVector = Icons.Rounded.PushPin,
-                        contentDescription = "Pin",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                IconButton(onClick = {
-                    offsetX = 0f
-                    onToggleArchive()
-                }, modifier = Modifier.minimumInteractiveComponentSize()) {
-                    Icon(
-                        imageVector = if (conversation.isArchived) Icons.Rounded.Unarchive else Icons.Rounded.Archive,
-                        contentDescription = "Archive",
-                        tint = MaterialTheme.colorScheme.secondary
-                    )
-                }
-            }
-        }
-
-        Surface(
-            modifier = Modifier
-                .offset(x = animatedOffset.dp)
-                .fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            color = if (isSelected) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-            } else {
-                Color.Transparent
-            },
-            tonalElevation = 1.dp,
-            onClick = {
-                if (offsetX != 0f) {
-                    offsetX = 0f
-                } else {
-                    onSelectConversation(conversation.id)
-                }
-            }
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = if (conversation.isPinned) Icons.Rounded.PushPin else Icons.Rounded.ChatBubbleOutline,
-                    contentDescription = null,
-                    tint = if (conversation.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    modifier = if (conversation.isPinned) {
-                        Modifier
+                if (conversation.isPinned) {
+                    Icon(
+                        imageVector = Icons.Rounded.PushPin,
+                        contentDescription = "Pinned",
+                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
                             .size(18.dp)
-                            .graphicsLayer(rotationZ = 45f)
-                    } else {
-                        Modifier.size(18.dp)
-                    }
-                )
-                Spacer(modifier = Modifier.width(12.dp))
+                            .padding(end = 4.dp)
+                    )
+                }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = conversation.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (conversation.isPinned || isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                     Text(
-                        text = conversation.modelId.replace("gemini-2.5-", "").replace("gemini-3.5-", "").replace("gpt-5-", "").replace("-", " ").capitalize(java.util.Locale.ROOT),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        text = formattedTime,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
-                
-                var showOptions by remember { mutableStateOf(false) }
-                Box {
-                    IconButton(
-                        onClick = { showOptions = true },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            Icons.Rounded.MoreVert,
-                            contentDescription = "Options",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showOptions,
-                        onDismissRequest = { showOptions = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(if (isArabic) (if (conversation.isPinned) "إلغاء التثبيت" else "تثبيت المحادثة") else (if (conversation.isPinned) "Unpin" else "Pin")) },
-                            leadingIcon = { Icon(Icons.Rounded.PushPin, null) },
-                            onClick = {
-                                showOptions = false
-                                onTogglePin()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (isArabic) (if (conversation.isArchived) "إلغاء الأرشفة" else "أرشفة المحادثة") else (if (conversation.isArchived) "Unarchive" else "Archive")) },
-                            leadingIcon = { Icon(Icons.Rounded.Archive, null) },
-                            onClick = {
-                                showOptions = false
-                                onToggleArchive()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (isArabic) "إعادة تسمية" else "Rename") },
-                            leadingIcon = { Icon(Icons.Rounded.Edit, null) },
-                            onClick = {
-                                showOptions = false
-                                onRename()
-                            }
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text(if (isArabic) "حذف" else "Delete", color = MaterialTheme.colorScheme.error) },
-                            leadingIcon = { Icon(Icons.Rounded.Delete, null, tint = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                showOptions = false
-                                onDelete()
-                            }
-                        )
-                    }
+            }
+            Box {
+                IconButton(onClick = { showMenu = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Rounded.MoreVert, contentDescription = "More", tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (isArabic) {
+                                    if (conversation.isPinned) "إلغاء التثبيت" else "تثبيت"
+                                } else {
+                                    if (conversation.isPinned) "Unpin" else "Pin"
+                                }
+                            )
+                        },
+                        onClick = { showMenu = false; onTogglePin() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (isArabic) "إعادة تسمية" else "Rename") },
+                        onClick = { showMenu = false; onRename() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (isArabic) "حذف" else "Delete", color = MaterialTheme.colorScheme.error) },
+                        onClick = { showMenu = false; onDelete() }
+                    )
                 }
             }
         }
     }
 }
 
-// Completely Redesigned Sidebar Layout (Gemini Style)
-
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MainDrawerContent(
     settings: com.example.core.model.AppSettings,
     selectedModel: com.example.core.model.AiModel,
     activeConversationId: String?,
     onSelectModel: (com.example.core.model.AiModel) -> Unit,
-    conversations: List<Conversation>,
+    conversations: List<com.example.core.database.Conversation>,
     onSelectConversation: (String) -> Unit,
     onNewChat: () -> Unit,
     onNavigateToSettings: () -> Unit,
@@ -2294,18 +2058,21 @@ fun MainDrawerContent(
     onCloseDrawer: () -> Unit,
     onRenameConversation: (String, String) -> Unit,
     onDeleteConversation: (String) -> Unit,
-    onTogglePinConversation: (Conversation) -> Unit,
-    onToggleArchiveConversation: (Conversation) -> Unit,
+    onTogglePinConversation: (com.example.core.database.Conversation) -> Unit,
+    onToggleArchiveConversation: (com.example.core.database.Conversation) -> Unit,
     onUpdateTheme: (com.example.core.model.AppTheme) -> Unit,
     onUpdateLanguage: (com.example.core.model.AppLanguage) -> Unit
 ) {
     val isArabic = settings.language == com.example.core.model.AppLanguage.ARABIC
     val context = androidx.compose.ui.platform.LocalContext.current
     
-    var conversationToRename by remember { mutableStateOf<Conversation?>(null) }
+    val (pinnedConversations, unpinnedConversations) = remember(conversations) {
+        conversations.partition { it.isPinned }
+    }
+    
+    var conversationToRename by remember { mutableStateOf<com.example.core.database.Conversation?>(null) }
     var renameNewTitle by remember { mutableStateOf("") }
-    var conversationToDelete by remember { mutableStateOf<Conversation?>(null) }
-
+    
     if (conversationToRename != null) {
         AlertDialog(
             onDismissRequest = { conversationToRename = null },
@@ -2314,21 +2081,14 @@ fun MainDrawerContent(
                 OutlinedTextField(
                     value = renameNewTitle,
                     onValueChange = { renameNewTitle = it },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    singleLine = true
                 )
             },
             confirmButton = {
-                Button(
-                    shape = RoundedCornerShape(10.dp),
-                    onClick = {
-                        if (renameNewTitle.isNotBlank()) {
-                            onRenameConversation(conversationToRename!!.id, renameNewTitle)
-                        }
-                        conversationToRename = null
-                    }
-                ) {
+                Button(onClick = {
+                    onRenameConversation(conversationToRename!!.id, renameNewTitle)
+                    conversationToRename = null
+                }) {
                     Text(if (isArabic) "حفظ" else "Save")
                 }
             },
@@ -2340,392 +2100,196 @@ fun MainDrawerContent(
         )
     }
 
-    if (conversationToDelete != null) {
-        AlertDialog(
-            onDismissRequest = { conversationToDelete = null },
-            title = { Text(if (isArabic) "حذف المحادثة" else "Delete Conversation") },
-            text = { Text(if (isArabic) "هل أنت متأكد أنك تريد حذف هذه المحادثة؟" else "Are you sure you want to delete this conversation?") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onDeleteConversation(conversationToDelete!!.id)
-                        conversationToDelete = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(if (isArabic) "حذف" else "Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { conversationToDelete = null }) {
-                    Text(if (isArabic) "إلغاء" else "Cancel")
-                }
-            }
-        )
-    }
-
-    ModalDrawerSheet(
-        drawerContainerColor = MaterialTheme.colorScheme.surface,
-        drawerContentColor = MaterialTheme.colorScheme.onSurface,
-        drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
-        modifier = Modifier.width(320.dp)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(vertical = 12.dp)
-        ) {
-            // Header: Nabih AI Logo
+    ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.background) {
+        Column(modifier = Modifier.fillMaxSize()) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
-                    .clickable { onCloseDrawer() },
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.logo),
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier.size(34.dp)
-                )
-                Spacer(modifier = Modifier.width(14.dp))
-                Text(
-                    text = "Nabih AI",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    letterSpacing = 0.5.sp
-                )
+                Text("Nabih AI", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                IconButton(onClick = { onNewChat(); onCloseDrawer() }) {
+                    Icon(Icons.Rounded.Add, contentDescription = "New Chat", tint = MaterialTheme.colorScheme.onBackground)
+                }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Main Actions & List
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                // Top Action: New Chat
+            
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            
+            androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
+                
                 item {
-                    Surface(
-                        onClick = { onNewChat(); onCloseDrawer() },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.AddComment,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = if (isArabic) "محادثة جديدة" else "New Chat",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(24.dp)) },
+                        label = { Text(if (isArabic) "البحث" else "Search", style = MaterialTheme.typography.bodyLarge) },
+                        selected = false,
+                        onClick = { onNavigateTo("search"); onCloseDrawer() },
+                        colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                    )
                 }
-
-                // Top Action: Files
+                
                 item {
-                    Surface(
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Rounded.FolderOpen, contentDescription = null, modifier = Modifier.size(24.dp)) },
+                        label = { Text(if (isArabic) "الملفات" else "Files", style = MaterialTheme.typography.bodyLarge) },
+                        selected = false,
                         onClick = { onNavigateTo("files"); onCloseDrawer() },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color.Transparent,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.FolderOpen,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = if (isArabic) "الملفات والمستندات" else "Files & Documents",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
+                        colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                    )
                 }
 
                 item {
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                    Text(
-                        text = if (isArabic) "المحادثات السابقة" else "Recent Chats",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 4.dp)
-                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 8.dp))
                 }
 
-                // Conversations List
-                if (conversations.isEmpty()) {
+                if (pinnedConversations.isNotEmpty()) {
                     item {
+                        Text(
+                            text = if (isArabic) "المحادثات المثبتة" else "Pinned",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                        )
+                    }
+                    
+                    items(pinnedConversations, key = { it.id }) { conv ->
+                        ConversationItem(
+                            conversation = conv,
+                            isSelected = conv.id == activeConversationId,
+                            isArabic = isArabic,
+                            onSelect = { onSelectConversation(conv.id); onCloseDrawer() },
+                            onTogglePin = { onTogglePinConversation(conv) },
+                            onRename = { 
+                                renameNewTitle = conv.title
+                                conversationToRename = conv
+                            },
+                            onDelete = { onDeleteConversation(conv.id) },
+                            modifier = Modifier.animateItemPlacement()
+                        )
+                    }
+                    
+                    item {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+
+                if (unpinnedConversations.isNotEmpty()) {
+                    if (pinnedConversations.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = if (isArabic) "المحادثات الأخيرة" else "Recent",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+                    
+                    items(unpinnedConversations, key = { it.id }) { conv ->
+                        ConversationItem(
+                            conversation = conv,
+                            isSelected = conv.id == activeConversationId,
+                            isArabic = isArabic,
+                            onSelect = { onSelectConversation(conv.id); onCloseDrawer() },
+                            onTogglePin = { onTogglePinConversation(conv) },
+                            onRename = { 
+                                renameNewTitle = conv.title
+                                conversationToRename = conv
+                            },
+                            onDelete = { onDeleteConversation(conv.id) },
+                            modifier = Modifier.animateItemPlacement()
+                        )
+                    }
+                }
+            }
+            
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            
+            Column(modifier = Modifier.padding(8.dp)) {
+                // API Keys Shortcut
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Rounded.VpnKey, contentDescription = null, modifier = Modifier.size(24.dp)) },
+                    label = { Text(if (isArabic) "مفاتيح API" else "API Keys", style = MaterialTheme.typography.bodyLarge) },
+                    selected = false,
+                    onClick = { onNavigateTo("api_keys"); onCloseDrawer() },
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                NavigationDrawerItem(
+                    icon = {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp, horizontal = 12.dp),
-                            contentAlignment = Alignment.CenterStart
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = if (isArabic) "لا توجد محادثات مؤخراً" else "No recent conversations",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            )
-                        }
-                    }
-                } else {
-                    conversations.forEach { conversation ->
-                        val isSelected = conversation.id == activeConversationId
-                        item(key = conversation.id) {
-                            Surface(
-                                onClick = { onSelectConversation(conversation.id); onCloseDrawer() },
-                                modifier = Modifier.fillMaxWidth(),
-                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f) else Color.Transparent,
-                                contentColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = if (isSelected) Icons.Rounded.ChatBubble else Icons.Rounded.ChatBubbleOutline,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
+                            if (settings.profilePictureUri.isNotEmpty()) {
+                                AsyncImage(
+                                    model = settings.profilePictureUri,
+                                    contentDescription = "Profile Picture",
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                val initials = settings.userName.split(" ").filter { it.isNotEmpty() }.take(2).joinToString("") { it.take(1) }.uppercase()
+                                if (initials.isNotEmpty()) {
                                     Text(
-                                        text = conversation.title,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
+                                        text = initials,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
-                                    
-                                    // Quick Row Action Buttons
-                                    if (isSelected) {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            IconButton(
-                                                onClick = {
-                                                    conversationToRename = conversation
-                                                    renameNewTitle = conversation.title
-                                                },
-                                                modifier = Modifier.size(26.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Edit,
-                                                    contentDescription = "Rename",
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                            }
-                                            IconButton(
-                                                onClick = { conversationToDelete = conversation },
-                                                modifier = Modifier.size(26.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.DeleteOutline,
-                                                    contentDescription = "Delete",
-                                                    tint = MaterialTheme.colorScheme.error,
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                            }
-                                        }
-                                    }
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Person,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
                                 }
                             }
                         }
-                    }
-                }
-            }
-
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-            )
-
-            // Sidebar Settings UI
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text(
-                    text = if (isArabic) "الإعدادات" else "Settings",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    },
+                    label = {
+                        Column {
+                            Text(
+                                text = if (isArabic) "الحساب" else "Account",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (settings.userName.isNotEmpty()) {
+                                Text(
+                                    text = settings.userName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
+                    selected = false,
+                    onClick = { onNavigateTo("account"); onCloseDrawer() },
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
 
-                // Account
-                Surface(
-                    onClick = { onNavigateTo("account"); onCloseDrawer() },
-                    color = Color.Transparent,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.PersonOutline,
-                            contentDescription = "Account",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text(
-                            text = if (isArabic) "الحساب" else "Account",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-
-                // API Keys
-                Surface(
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Rounded.Settings, contentDescription = null, modifier = Modifier.size(24.dp)) },
+                    label = { Text(if (isArabic) "الإعدادات" else "Settings", style = MaterialTheme.typography.bodyLarge) },
+                    selected = false,
                     onClick = { onNavigateToSettings(); onCloseDrawer() },
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.VpnKey,
-                            contentDescription = "API Keys",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text(
-                            text = if (isArabic) "مفاتيح API" else "API Keys",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Light Mode
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    color = Color.Transparent,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Outlined.LightMode,
-                                contentDescription = "Light Mode",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = if (isArabic) "الوضع الفاتح" else "Light Mode",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                        Switch(
-                            checked = settings.theme == com.example.core.model.AppTheme.LIGHT,
-                            onCheckedChange = { isLight ->
-                                onUpdateTheme(if (isLight) com.example.core.model.AppTheme.LIGHT else com.example.core.model.AppTheme.DARK)
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                            modifier = Modifier.scale(0.8f)
-                        )
-                    }
-                }
-
-                // Language
-                Surface(
-                    onClick = {
-                        onUpdateLanguage(if (isArabic) com.example.core.model.AppLanguage.ENGLISH else com.example.core.model.AppLanguage.ARABIC)
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    color = Color.Transparent
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Outlined.Language,
-                                contentDescription = "Language",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = if (isArabic) "العربية" else "English",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Rounded.KeyboardArrowDown,
-                            contentDescription = "Change",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
+                    colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
             }
         }
     }

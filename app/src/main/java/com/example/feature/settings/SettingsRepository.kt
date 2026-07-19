@@ -44,6 +44,7 @@ class SettingsRepository(context: Context) {
         val microsoftName = prefs.getString("microsoft_name", "") ?: ""
         val profilePictureUri = prefs.getString("profile_picture_uri", "") ?: ""
         val personalInfo = prefs.getString("personal_info", "") ?: ""
+        val userHandle = prefs.getString("user_handle", "") ?: ""
 
         val defaultModelVal = try {
             AiModel.valueOf(modelStr)
@@ -78,6 +79,7 @@ class SettingsRepository(context: Context) {
             userName = userName,
             profilePictureUri = profilePictureUri,
             personalInfo = personalInfo,
+            userHandle = userHandle,
             microsoftEmail = microsoftEmail,
             microsoftName = microsoftName,
             biometricsEnabled = prefs.getBoolean("biometrics_enabled", false),
@@ -173,13 +175,14 @@ class SettingsRepository(context: Context) {
         _settings.value = loadSettings()
     }
 
-    suspend fun updateProfile(name: String, pictureUri: String, info: String, newEmail: String = "") {
+    suspend fun updateProfile(name: String, pictureUri: String, info: String, newEmail: String = "", handle: String = "") {
         val oldEmail = prefs.getString("user_email", "") ?: ""
         
         prefs.edit()
             .putString("user_name", name.trim())
             .putString("profile_picture_uri", pictureUri)
             .putString("personal_info", info.trim())
+            .putString("user_handle", handle.trim())
             .apply()
             
         if (newEmail.isNotBlank() && oldEmail.isNotBlank() && oldEmail.lowercase() != newEmail.lowercase()) {

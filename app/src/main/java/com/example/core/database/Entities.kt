@@ -49,3 +49,14 @@ data class UserAccount(
     val passwordHash: String
 )
 
+data class AttachmentItem(
+    val messageId: String,
+    val conversationId: String,
+    val conversationTitle: String,
+    val imageUri: String?,
+    val documentUri: String?,
+    val documentName: String?,
+    val timestamp: Long
+)
+
+
