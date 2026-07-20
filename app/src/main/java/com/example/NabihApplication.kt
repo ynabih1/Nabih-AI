@@ -1,7 +1,7 @@
 package com.example
 
-import com.example.core.di.AppContainer
-import com.example.core.di.DefaultAppContainer
+import com.example.di.AppContainer
+import com.example.di.DefaultAppContainer
 
 import android.app.Application
 

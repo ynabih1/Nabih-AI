@@ -25,34 +25,35 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
     var geminiKey = System.getenv("GEMINI_API_KEY")
+    var keySource = "Environment Variable"
+
     if (geminiKey.isNullOrEmpty()) {
         val envFile = rootProject.file(".env")
         val envExampleFile = rootProject.file(".env.example")
         val props = Properties()
+
         if (envFile.exists()) {
             props.load(FileInputStream(envFile))
-        } else if (envExampleFile.exists()) {
+            geminiKey = props.getProperty("GEMINI_API_KEY")
+            keySource = ".env file"
+        } 
+        
+        if (geminiKey.isNullOrEmpty() && envExampleFile.exists()) {
             props.load(FileInputStream(envExampleFile))
+            geminiKey = props.getProperty("GEMINI_API_KEY")
+            keySource = ".env.example file (Fallback)"
         }
-        if (geminiKey.isNullOrEmpty()) geminiKey = props.getProperty("GEMINI_API_KEY") ?: ""
     }
 
-    if (geminiKey.isNullOrEmpty() || 
-        geminiKey == "MY_GEMINI_API_KEY" || 
-        geminiKey.contains("YOUR_") || 
-        geminiKey.contains("PLACEHOLDER")) {
-        throw GradleException(
-            "\n=====================================================================================\n" +
-            "BUILD ERROR: Gemini API Key is missing or invalid!\n" +
-            "To build this project outside of AI Studio, you MUST configure a valid Gemini API Key.\n\n" +
-            "Please follow these steps:\n" +
-            "1. Copy the file '.env.example' in the project root to '.env'\n" +
-            "2. Open the '.env' file and replace 'MY_GEMINI_API_KEY' with your actual Gemini API Key:\n" +
-            "   GEMINI_API_KEY=AIzaSy...\n\n" +
-            "This validation prevents compiling a non-functional build with placeholder keys.\n" +
-            "====================================================================================="
-        )
+    if (geminiKey.isNullOrEmpty()) {
+        geminiKey = "MY_GEMINI_API_KEY"
+        keySource = "Hardcoded Fallback"
     }
+
+    logger.warn("\n=========================================================")
+    logger.warn("DIAGNOSTIC: GEMINI_API_KEY loaded from: $keySource")
+    logger.warn("=========================================================\n")
+
     buildConfigField("String", "GEMINI_API_KEY", "\"${geminiKey}\"")
   }
 

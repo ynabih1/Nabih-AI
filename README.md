@@ -1,84 +1,48 @@
-# Nabih AI
+# Nabih AI - Android Application
 
-Nabih AI is a professional, high-performance Android AI assistant built using Kotlin, Jetpack Compose, and modern Android architecture. Designed with a clean Material 3 user interface, the application offers a cohesive, highly responsive experience with native support for both English and Arabic languages.
+Nabih AI is a modern, fast, and feature-rich AI assistant Android application. It supports seamless integration with various leading AI models, providing users with an intuitive interface for chatting, image generation, and managing conversations.
 
-## Project Description
+## Key Features
 
-Nabih AI functions as a central portal for communicating with advanced artificial intelligence models. It provides users with direct, configurable access to multiple leading AI engines, including Gemini, ChatGPT, Claude, and specialized Nabih models. The application emphasizes local control, allowing users to safely manage and input their own API credentials directly on-device.
+- **Multi-Model Support:** Chat seamlessly with Nabih Ultra (flagship native model), Google Gemini, OpenAI ChatGPT, and Anthropic Claude.
+- **Model Switcher:** Dynamically switch between connected AI models from the chat screen.
+- **Authentication:** Securely log in using Email/Password or Google Sign-In with full Arabic/English localized error handling.
+- **Rich Media Chat:** Support for text, images, and document attachments within conversations.
+- **Offline History:** All conversations are stored locally using Room Database for offline access.
+- **Adaptive UI:** Fully localized in English and Arabic, with dynamic Light/Dark themes using a warm, minimalist color palette.
+- **Downloadable Fonts:** Uses Google Fonts API (Source Serif 4, Inter, IBM Plex Sans Arabic) for beautiful, lightweight typography.
 
-## Core Features
+## Project Structure
 
-- **Multi-Model Support:** Configure and switch seamlessly between Gemini, ChatGPT, Claude, and Nabih Ultra models.
-- **Material 3 Design:** Built entirely with Jetpack Compose following Material 3 guidelines, featuring beautiful, eye-safe dark layouts, smooth transitions, and dynamic components.
-- **Bilingual Experience:** Full localized interface and navigation support for both English and Arabic languages.
-- **Voice & Chat Assistant:** Responsive, low-latency text and voice interactions with conversational memory retention.
-- **Secure Key Storage:** Local settings architecture that securely handles and stores user API keys on-device without exposing them.
-- **Clean Architecture & MVVM:** Structured following modern Android practices using repositories, custom ViewModels, Room database for local state persistence, and Kotlin Coroutines/Flows.
+The project has been reorganized into a feature-based structure for better maintainability:
 
-## Installation
+```text
+com.example/
+├── auth/            # Authentication screens (Login, Account, Google Sign-In logic)
+├── chat/            # Chat interface, feedback sheet, model switcher, and diagnostics
+├── data/            
+│   ├── local/       # Room Database (Entities, DAOs, AppDatabase)
+│   ├── remote/      # API Services, Network clients, and AiProvider routing
+│   └── repository/  # Repositories for Chat, Settings, and Memory
+├── di/              # Dependency Injection (ViewModelFactory, AppContainer)
+├── model/           # Core data models (AiModel, ApiProvider, Settings, Models)
+├── settings/        # Settings screens, API Keys configuration, App features
+├── ui/              
+│   ├── components/  # Reusable UI elements (MarkdownRenderer, TypingAnimation)
+│   └── theme/       # App Theme (Color, Typography, Theme)
+├── utils/           # Helper utilities (NetworkMonitor, SecureStorage, DocumentParser)
+├── MainActivity.kt  # Main entry point and Navigation Host
+└── NabihApplication.kt # Application class
+```
 
-1. **Prerequisites:**
-   - Android Studio (Ladybug or newer)
-   - Android SDK 34+
-   - Gradle 8.0+
+## Getting Started
 
-2. **Clone the Repository:**
-   ```bash
-   git clone https://github.com/ynabihx/nabih-ai.git
-   cd nabih-ai
-   ```
+1. Clone the repository.
+2. Open the project in Android Studio.
+3. Sync Gradle files.
+4. Provide a valid `google-services.json` in the `app/` directory (for Firebase Auth/Google Sign-In).
+5. Build and run the application.
 
-3. **Configure API Keys:**
-   - Define credentials in the secure **Settings** screen inside the application.
-   - Alternatively, copy `.env.example` to `.env` and specify default keys.
+## API Keys Configuration
 
-4. **Build and Run:**
-   - Open the project in Android Studio.
-   - Sync Gradle files.
-   - Run the `:app` module on a compatible Android device or emulator.
-
-## إعداد مفتاح API قبل البناء اليدوي (Manual Builds Setup)
-
-عند بناء التطبيق كـ **Release APK** أو تشغيله يدوياً من خلال **Android Studio** (بدلاً من بيئة AI Studio مباشرة)، ستحتاج إلى تكوين مفتاح Gemini API الحقيقي الخاص بك محلياً لضمان عمل طراز Nabih Ultra ومميزات Gemini بشكل طبيعي. الاعتماد على لوحة أسرار AI Studio (Secrets Panel) يعمل فقط داخل بيئة التطوير السحابية ولا ينطبق على البناء اليدوي المحلي.
-
-لإعداد المفتاح، اتبع الخطوات التالية قبل تشغيل أي عملية Build أو Generate Signed APK:
-
-1. **إنشاء ملف البيئة محلياً:**
-   قم بنسخ ملف `.env.example` في الجذر الرئيسي للمشروع وأعد تسميته إلى `.env`.
-   ```bash
-   cp .env.example .env
-   ```
-
-2. **تحديث قيمة المفتاح:**
-   افتح ملف `.env` وقم بتغيير قيمة `GEMINI_API_KEY` الوهمية بمفتاحك الحقيقي:
-   ```properties
-   GEMINI_API_KEY=AIzaSyYourActualKeyHere...
-   ```
-
-> ⚠️ **ملاحظة أمنية:** تم إضافة فحص وقت البناء (Build-time validation) يمنع تصدير APK أو إتمام عملية البناء في حال كانت قيمة المفتاح فارغة أو مطابقة للقيمة الوهمية `MY_GEMINI_API_KEY` لمنع تصدير تطبيقات غير صالحة بصمت. كما أن ملف `.env` مستثنى تماماً من تتبع Git عبر ملف `.gitignore` لحماية خصوصية مفاتيحك.
-
----
-
-### Manual API Key Setup (English)
-
-When building the application as a **Release APK** or running it directly via **Android Studio** (instead of the AI Studio cloud environment), you must configure your Gemini API Key locally. Relying on the AI Studio secrets panel only works within the cloud environment and does not apply to manual local builds.
-
-To set up the key, follow these steps before executing any Build or Generate Signed APK task:
-
-1. **Create the Environment File:**
-   Copy the `.env.example` file in the project root and rename it to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. **Update the API Key:**
-   Open `.env` and replace the placeholder `GEMINI_API_KEY` with your actual Gemini API key:
-   ```properties
-   GEMINI_API_KEY=AIzaSyYourActualKeyHere...
-   ```
-
-> ⚠️ **Security Note:** A build-time validation check is in place. It will halt the build with an error if the key is empty, contains placeholder words, or remains set to `MY_GEMINI_API_KEY`. The `.env` file is fully ignored via `.gitignore` to keep your credentials secure.
-
-## License
-
-This project is licensed under the Apache License 2.0. See the `LICENSE` file for details.
+Users can add their own API keys via the **Settings -> API Keys** screen in the app. The app securely stores these keys using EncryptedSharedPreferences and uses `AiRouter` to dynamically route requests to the correct provider.

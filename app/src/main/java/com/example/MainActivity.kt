@@ -1,22 +1,24 @@
 package com.example
+import androidx.compose.foundation.border
+import androidx.compose.ui.unit.dp
 
-import com.example.core.di.ViewModelFactory
-import com.example.core.model.AppLanguage
-import com.example.core.model.AppTheme
-import com.example.core.theme.NabihTheme
-import com.example.feature.auth.AccountScreen
+import com.example.di.ViewModelFactory
+import com.example.model.AppLanguage
+import com.example.model.AppTheme
+import com.example.ui.theme.NabihTheme
+import com.example.auth.AccountScreen
 
-import com.example.feature.auth.LoginScreen
-import com.example.feature.chat.ChatViewModel
-import com.example.feature.chat.HomeViewModel
-import com.example.feature.chat.MainScreen
-import com.example.feature.settings.SettingsScreen
-import com.example.feature.settings.ApiKeysScreen
-import com.example.feature.settings.SettingsViewModel
-import com.example.feature.tools.FilesScreen
-import com.example.feature.tools.HelpScreen
-import com.example.feature.tools.PrivacyScreen
-import com.example.feature.tools.SavedChatsScreen
+import com.example.auth.LoginScreen
+import com.example.chat.ChatViewModel
+import com.example.chat.HomeViewModel
+import com.example.chat.MainScreen
+import com.example.settings.SettingsScreen
+import com.example.settings.ApiKeysScreen
+import com.example.settings.SettingsViewModel
+import com.example.settings.FilesScreen
+import com.example.settings.HelpScreen
+import com.example.settings.PrivacyScreen
+import com.example.settings.SavedChatsScreen
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -40,13 +42,31 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.google.firebase.FirebaseApp
+import com.example.chat.DiagnosticScreen
+import com.example.BuildConfig
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        val diagnosticErrors = mutableListOf<String>()
 
+        // Check Firebase config
+        try {
+            if (FirebaseApp.getApps(this).isEmpty()) {
+                diagnosticErrors.add("Firebase configuration missing or invalid. Check google-services.json.")
+            }
+        } catch (e: Exception) {
+            diagnosticErrors.add("Firebase initialization failed: ${e.message}")
+        }
+
+        // Check Gemini API Key
+        val geminiKey = BuildConfig.GEMINI_API_KEY
+        if (geminiKey.isEmpty() || geminiKey == "MY_GEMINI_API_KEY" || geminiKey.contains("YOUR_") || geminiKey.contains("PLACEHOLDER")) {
+            diagnosticErrors.add("Gemini API Key is missing or invalid. Check your .env file.")
+        }
 
         // Get dependencies container
         val appContainer = (application as NabihApplication).container
@@ -68,18 +88,21 @@ class MainActivity : ComponentActivity() {
             // Dynamically provide Language Alignment (RTL / LTR) across all layouts
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                 val darkTheme = when (settings.theme) {
-                    com.example.core.model.AppTheme.DARK -> true
-                    com.example.core.model.AppTheme.LIGHT -> false
-                    com.example.core.model.AppTheme.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+                    com.example.model.AppTheme.DARK -> true
+                    com.example.model.AppTheme.LIGHT -> false
+                    com.example.model.AppTheme.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
                 }
                 NabihTheme(darkTheme = darkTheme, isArabic = settings.language == AppLanguage.ARABIC) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        val navController = rememberNavController()
+                        if (diagnosticErrors.isNotEmpty()) {
+                            DiagnosticScreen(errors = diagnosticErrors)
+                        } else {
+                            val navController = rememberNavController()
 
-                        NavHost(
-                            navController = navController,
-                            startDestination = if (settings.isLoggedIn) "home" else "login"
-                        ) {
+                            NavHost(
+                                navController = navController,
+                                startDestination = if (settings.isLoggedIn) "home" else "login"
+                            ) {
                             // Onboarding and Premium Sign-in
                             composable("login") {
                                 LoginScreen(
@@ -166,6 +189,7 @@ class MainActivity : ComponentActivity() {
                             composable("help") {
                                 HelpScreen(onNavigateBack = { navController.popBackStack() }, isArabic = settings.language == AppLanguage.ARABIC)
                             }
+                        }
                         }
                     }
                 }
