@@ -28,13 +28,17 @@ jobs:
           gradle-version: '9.3.1'
           validate-wrappers: false
 
+      - name: Create .env file
+        # Note: The GEMINI_API_KEY must be added manually in GitHub:
+        # Settings -> Secrets and variables -> Actions -> New repository secret
+        run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+      - name: Decode google-services.json
+        # Note: The GOOGLE_SERVICES_JSON secret must contain the base64 encoded content
+        # of your real google-services.json file (run: base64 -i app/google-services.json | tr -d '\n').
+        # Add it in GitHub: Settings -> Secrets and variables -> Actions -> New repository secret
+        run: echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 -d > app/google-services.json
       - name: Prepare missing files
         run: |
-          # Create a dummy .env file with required keys
-          echo "GEMINI_API_KEY=dummy_key_for_build" > .env
-          echo "GOOGLE_CLIENT_ID=dummy_client_id" >> .env
-          # Create a dummy google-services.json to prevent plugin errors
-          echo '{"project_info":{"project_number":"123","project_id":"dummy","storage_bucket":"dummy"},"client":[{"client_info":{"mobilesdk_app_id":"1:123:android:123","android_client_info":{"package_name":"com.aistudio.nabihai.xlyjpr"}},"oauth_client":[],"api_key":[{"current_key":"dummy"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}]}' > app/google-services.json
           # Create a debug.keystore if it does not exist
           if [ ! -f debug.keystore ]; then keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "C=US, O=Android, CN=Android Debug"; fi
 
