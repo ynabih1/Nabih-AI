@@ -59,6 +59,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -463,22 +464,23 @@ fun MainScreen(
             )
         }
     ) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.surface
+                    )
+                )
+            )
+        )
         Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
                 TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(painter = painterResource(id = R.drawable.logo), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(28.dp))
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "Nabih AI",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    },
+                    title = {},
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.minimumInteractiveComponentSize()) {
                             Icon(Icons.Rounded.Menu, contentDescription = "Menu")
@@ -490,7 +492,7 @@ fun MainScreen(
                     )
                 )
             },
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = Color.Transparent
         ) { paddingValues ->
             Column(
                 modifier = Modifier
@@ -585,22 +587,7 @@ fun MainScreen(
                     when (val state = chatState) {
                         is ChatUiState.Idle -> {
                             EmptyChatState(
-                                isArabic = isArabic,
-                                onSuggestionClick = { prompt ->
-                                    val currentConvId = chatViewModel.activeConversationId.value
-                                    if (currentConvId == null) {
-                                        homeViewModel.createConversation(
-                                            title = prompt,
-                                            modelId = selectedModel.id,
-                                            isTemporary = false
-                                        ) { newId ->
-                                            chatViewModel.selectConversation(newId)
-                                            chatViewModel.sendMessage(prompt)
-                                        }
-                                    } else {
-                                        chatViewModel.sendMessage(prompt)
-                                    }
-                                }
+                                isArabic = isArabic
                             )
                         }
                         is ChatUiState.Loading -> {
@@ -798,7 +785,7 @@ fun MainScreen(
 }
 
 @Composable
-fun EmptyChatState(isArabic: Boolean, onSuggestionClick: (String) -> Unit) {
+fun EmptyChatState(isArabic: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -806,13 +793,19 @@ fun EmptyChatState(isArabic: Boolean, onSuggestionClick: (String) -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(painter = painterResource(id = R.drawable.logo), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(80.dp))
-        Spacer(modifier = Modifier.height(20.dp))
+        Icon(
+            painter = painterResource(id = R.drawable.logo), 
+            contentDescription = null, 
+            tint = Color.Unspecified, 
+            modifier = Modifier.size(100.dp)
+        )
+        Spacer(modifier = Modifier.height(32.dp))
         Text(
-            text = if (isArabic) "كيف يمكنني مساعدتك اليوم؟" else "How can I assist you today?",
-            style = MaterialTheme.typography.headlineMedium,
+            text = if (isArabic) "مرحباً! كيف يمكنني مساعدتك اليوم؟" else "Hello! How can I help you today?",
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -1677,10 +1670,9 @@ fun BottomInputArea(
             modifier = Modifier
                 .fillMaxWidth()
                 .animateContentSize(),
-            shape = RoundedCornerShape(24.dp),
-            color = if (isFocused) MaterialTheme.colorScheme.surfaceContainerLowest else MaterialTheme.colorScheme.surfaceContainer,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            shadowElevation = if (isFocused) 2.dp else 0.dp
+            shape = RoundedCornerShape(28.dp),
+            shadowElevation = 8.dp,
+            color = MaterialTheme.colorScheme.surface
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth()
@@ -1947,8 +1939,9 @@ fun BottomInputArea(
                                     modifier = Modifier
                                         .width(230.dp)
                                         .shadow(12.dp, RoundedCornerShape(24.dp)),
-                                    shape = RoundedCornerShape(24.dp),
-                                    color = MaterialTheme.colorScheme.surface,
+                                    shape = RoundedCornerShape(28.dp),
+            shadowElevation = 8.dp,
+            color = MaterialTheme.colorScheme.surface,
                                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                                 ) {
                                     Column(
@@ -2350,19 +2343,13 @@ fun MainDrawerContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 32.dp, bottom = 24.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.logo),
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier.size(32.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = "Nabih AI",
-                    style = MaterialTheme.typography.titleLarge,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
@@ -2377,43 +2364,41 @@ fun MainDrawerContent(
             ) {
                 // Group 1: New Chat, Search, Files
                 item {
-                    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                    val isPressed by interactionSource.collectIsPressedAsState()
-                    val scale by androidx.compose.animation.core.animateFloatAsState(targetValue = if (isPressed) 0.96f else 1f, label = "newChatScale")
-
-                    Button(
+                    Surface(
                         onClick = { onNewChat(); onCloseDrawer() },
-                        interactionSource = interactionSource,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ),
-                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                            .scale(scale)
+                            .padding(horizontal = 16.dp, vertical = 2.dp)
                     ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Start,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 16.dp)
+                                .padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(22.dp))
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(22.dp)
+                            )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 text = if (isArabic) "محادثة جديدة" else "New Chat",
+                                style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodyLarge
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
                 }
                 
-                item { Spacer(modifier = Modifier.height(16.dp)) }
+                item { Spacer(modifier = Modifier.height(8.dp)) }
                 
                 item {
                     DrawerMenuItem(
@@ -2437,12 +2422,12 @@ fun MainDrawerContent(
 
                 // 24dp spacing before and after Divider separating Group 1 and Group 2
                 item {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
 
                 if (pinnedConversations.isEmpty() && todayConversations.isEmpty() && olderConversations.isEmpty()) {
@@ -2450,27 +2435,27 @@ fun MainDrawerContent(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 48.dp, bottom = 24.dp),
+                                .padding(bottom = 24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                            verticalArrangement = Arrangement.Top
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.ChatBubbleOutline,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                                modifier = Modifier.size(48.dp)
+                                modifier = Modifier.size(36.dp)
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
                             Text(
                                 text = if (isArabic) "لا توجد محادثات بعد" else "No chats yet",
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = if (isArabic) "ابدأ محادثة جديدة للبدء" else "Start a new chat to begin",
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
                         }
@@ -2595,6 +2580,13 @@ fun MainDrawerContent(
                     isArabic = isArabic
                 )
 
+                Spacer(modifier = Modifier.height(4.dp))
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
                 // 2. Modern M3 Account Card
                 Card(
                     onClick = { onNavigateTo("account"); onCloseDrawer() },
@@ -2609,7 +2601,7 @@ fun MainDrawerContent(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -2686,12 +2678,16 @@ fun MainDrawerContent(
                             imageVector = if (isArabic) Icons.AutoMirrored.Rounded.KeyboardArrowLeft else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
 
-                // Spacing between Account and Settings below it
+                Spacer(modifier = Modifier.height(4.dp))
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                )
                 Spacer(modifier = Modifier.height(4.dp))
 
                 // 3. Settings Item

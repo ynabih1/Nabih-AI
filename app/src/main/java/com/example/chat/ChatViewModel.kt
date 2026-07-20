@@ -37,7 +37,8 @@ class ChatViewModel(
     private val savedStateHandle: SavedStateHandle,
     private val chatRepository: ChatRepository,
     private val settingsRepository: SettingsRepository,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val notificationHelper: com.example.util.NotificationHelper
 ) : ViewModel() {
 
     data class FallbackDialogState(
@@ -384,6 +385,11 @@ class ChatViewModel(
                     val responseText = _currentStreamingResponse.value
                     if (responseText.isNotEmpty()) {
                         saveMessage(convId, "model", responseText)
+                        if (settingsRepository.settings.value.completionNotifications) {
+                            val title = if (settingsRepository.settings.value.language == com.example.model.AppLanguage.ARABIC) "اكتمل الرد" else "Response Completed"
+                            val msg = if (settingsRepository.settings.value.language == com.example.model.AppLanguage.ARABIC) "أنهى Nabih Ultra إجابته." else "Nabih Ultra has finished answering."
+                            notificationHelper.showCompletionNotification(title, msg, convId)
+                        }
                         
                         _followUpSuggestions.value = when {
                             text.lowercase().contains("code") || text.lowercase().contains("kotlin") || text.lowercase().contains("program") -> listOf(
@@ -421,7 +427,7 @@ class ChatViewModel(
 
             // Remove last model response if exists
             val lastMsg = messages.lastOrNull()
-            if (lastMsg != null && lastMsg.role == "model" && (lastMsg.content.startsWith("An error occurred") || lastMsg.content.startsWith("API_ERROR:") || lastMsg.content.startsWith("حدث خطأ:") || lastMsg.content.startsWith("Error:"))) {
+            if (lastMsg != null && lastMsg.role == "model" && (lastMsg.content.startsWith("An error occurred") || lastMsg.content.startsWith("API_ERROR:") || lastMsg.content.startsWith("حدث خطأ:") || lastMsg.content.startsWith("Error:") || lastMsg.content.startsWith("Sorry,") || lastMsg.content.startsWith("عذراً"))) {
                 chatRepository.deleteMessageById(lastMsg.id)
             }
             
@@ -456,6 +462,11 @@ class ChatViewModel(
                     val responseText = _currentStreamingResponse.value
                     if (responseText.isNotEmpty()) {
                         saveMessage(convId, "model", responseText)
+                        if (settingsRepository.settings.value.completionNotifications) {
+                            val title = if (settingsRepository.settings.value.language == com.example.model.AppLanguage.ARABIC) "اكتمل الرد" else "Response Completed"
+                            val msg = if (settingsRepository.settings.value.language == com.example.model.AppLanguage.ARABIC) "أنهى Nabih Ultra إجابته." else "Nabih Ultra has finished answering."
+                            notificationHelper.showCompletionNotification(title, msg, convId)
+                        }
                     }
                     _currentStreamingResponse.value = ""
                 }.catch { e ->
@@ -546,6 +557,11 @@ class ChatViewModel(
                     val responseText = _currentStreamingResponse.value
                     if (responseText.isNotEmpty()) {
                         saveMessage(convId, "model", responseText)
+                        if (settingsRepository.settings.value.completionNotifications) {
+                            val title = if (settingsRepository.settings.value.language == com.example.model.AppLanguage.ARABIC) "اكتمل الرد" else "Response Completed"
+                            val msg = if (settingsRepository.settings.value.language == com.example.model.AppLanguage.ARABIC) "أنهى Nabih Ultra إجابته." else "Nabih Ultra has finished answering."
+                            notificationHelper.showCompletionNotification(title, msg, convId)
+                        }
                     }
                     _currentStreamingResponse.value = ""
                 }.catch { e ->

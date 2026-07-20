@@ -28,7 +28,8 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
                     savedStateHandle = savedStateHandle,
                     chatRepository = container.chatRepository,
                     settingsRepository = container.settingsRepository,
-                    networkMonitor = container.networkMonitor
+                    networkMonitor = container.networkMonitor,
+                    notificationHelper = container.notificationHelper
                 ) as T
             }
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")

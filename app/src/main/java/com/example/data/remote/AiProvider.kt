@@ -98,16 +98,18 @@ class GeminiProvider : AiProvider {
         try {
             val responseBody = NetworkClient.geminiService.generateContentStream(modelId, apiKey, req)
             val reader = responseBody.byteStream().bufferedReader()
-            var line: String?
             val stringBuilder = java.lang.StringBuilder()
             var accumulated = ""
-            while (reader.readLine().also { line = it } != null) {
-                val l = line?.trim() ?: continue
-                if (l.isEmpty()) continue
-                accumulated += l
+            var previouslyProcessedBlocks = 0
+            val buffer = CharArray(4096)
+            var readChars: Int
+            while (reader.read(buffer).also { readChars = it } != -1) {
+                val chunk = String(buffer, 0, readChars)
+                accumulated += chunk
                 try {
                     val textToken = "\"text\":"
                     var startIndex = 0
+                    var parsedBlocks = 0
                     while (true) {
                         val index = accumulated.indexOf(textToken, startIndex)
                         if (index == -1) break
@@ -129,11 +131,12 @@ class GeminiProvider : AiProvider {
                         if (valEnd < accumulated.length) {
                             val rawText = accumulated.substring(valStart + 1, valEnd)
                             val unescaped = unescapeJsonString(rawText)
-                            if (unescaped.length > stringBuilder.length) {
-                                val diff = unescaped.substring(stringBuilder.length)
-                                stringBuilder.append(diff)
-                                emit(diff)
+                            if (parsedBlocks >= previouslyProcessedBlocks) {
+                                stringBuilder.append(unescaped)
+                                emit(unescaped)
+                                previouslyProcessedBlocks++
                             }
+                            parsedBlocks++
                         }
                         startIndex = index + textToken.length
                     }
@@ -409,7 +412,14 @@ object AiErrorTranslator {
                         else -> "Unexpected provider error (${throwable.code()})."
                     }
                 }
-                else -> throwable.localizedMessage ?: throwable.message ?: "An unknown error occurred."
+                else -> {
+                    val msg = throwable.localizedMessage ?: throwable.message ?: ""
+                    if (msg.contains("VALIDATION_FAILED")) {
+                        "Sorry, I couldn't understand your request. Please try rephrasing your question."
+                    } else {
+                        msg.ifBlank { "An unknown error occurred." }
+                    }
+                }
             }
         }
         return when (throwable) {
@@ -434,6 +444,8 @@ object AiErrorTranslator {
                     mapApiErrorToUserMessage(500, provider)
                 } else if (msg.contains("timeout") || msg.contains("Timeout") || msg.contains("SocketTimeout")) {
                     mapApiErrorToUserMessage(-1, provider)
+                } else if (msg.contains("VALIDATION_FAILED")) {
+                    "عذراً، لم أتمكن من فهم طلبك. يرجى إعادة صياغة السؤال."
                 } else {
                     msg.ifBlank { "حدث خطأ غير معروف أثناء الاتصال بالمزود." }
                 }
@@ -531,7 +543,8 @@ object AiRouter {
             while (currentTry < maxRetries && !modelSuccess) {
                 try {
                     val provider = AiProviderFactory.getProvider(actualProviderType)
-                    val chunkCollector = mutableListOf<String>()
+                    val chunkCollector = StringBuilder()
+                    var validated = false
                     
                     provider.generateResponseStream(
                         modelId = modelId,
@@ -542,8 +555,35 @@ object AiRouter {
                         attachedBase64Image = attachedBase64Image,
                         attachedDocText = attachedDocText
                     ).collect { chunk ->
-                        chunkCollector.add(chunk)
-                        emit(chunkCollector.joinToString(""))
+                        chunkCollector.append(chunk)
+                        val accumulated = chunkCollector.toString()
+                        
+                        if (!validated) {
+                            if (accumulated.length > 25) {
+                                val testStrLower = accumulated.trimStart().lowercase()
+                                val isBad = testStrLower.startsWith("{") || testStrLower.startsWith("[") || 
+                                            testStrLower.startsWith("exception:") || testStrLower.startsWith("error:") ||
+                                            testStrLower.startsWith("api_error") ||
+                                            testStrLower.contains("match result value") || testStrLower.contains("stack trace") || 
+                                            testStrLower.contains("debug output") || testStrLower.contains("raw json parsing error")
+                                if (isBad) {
+                                    throw Exception("VALIDATION_FAILED: Bad response")
+                                }
+                                validated = true
+                                emit(accumulated)
+                            }
+                        } else {
+                            emit(accumulated)
+                        }
+                    }
+                    
+                    if (!validated) {
+                        val finalStr = chunkCollector.toString().trim()
+                        val lower = finalStr.lowercase()
+                        if (finalStr.isEmpty() || lower == "null" || lower == "undefined" || lower.startsWith("{") || lower.startsWith("[") || lower.contains("match result value")) {
+                            throw Exception("VALIDATION_FAILED: Empty or invalid response")
+                        }
+                        emit(finalStr)
                     }
 
                     modelSuccess = true

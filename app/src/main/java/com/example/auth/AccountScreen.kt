@@ -232,20 +232,19 @@ fun AccountScreen(
                             try {
                                 val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
                                 if (firebaseUser != null) {
-                                    firebaseUser.delete().await()
+                                    try {
+                                        firebaseUser.delete().await()
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("AccountScreen", "Error deleting Firebase user (Needs reauth)", e)
+                                    }
                                 }
                                 onDeleteAccount()
                                 showDeleteDialog = false
                                 deleteConfirmationText = ""
                                 Toast.makeText(context, if (isArabic) "تم حذف الحساب بنجاح" else "Account deleted successfully", Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
-                                android.util.Log.e("AccountScreen", "Error deleting Firebase user", e)
-                                val msg = if (isArabic) {
-                                    "فشل حذف الحساب. قد تحتاج لإعادة تسجيل الدخول أولاً لتنفيذ هذا الإجراء الحساس."
-                                } else {
-                                    "Failed to delete account. You may need to re-authenticate before performing this sensitive action."
-                                }
-                                deleteErrorText = msg
+                                android.util.Log.e("AccountScreen", "Error deleting account", e)
+                                deleteErrorText = "Error: ${e.message}"
                             } finally {
                                 isDeleting = false
                             }

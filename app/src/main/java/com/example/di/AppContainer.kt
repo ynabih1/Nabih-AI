@@ -4,15 +4,14 @@ import com.example.data.repository.ChatRepository
 import com.example.data.repository.SettingsRepository
 import com.example.data.repository.MemoryRepository
 import com.example.data.local.AppDatabase
-
 import android.content.Context
-
 import com.example.utils.NetworkMonitor
 
 interface AppContainer {
     val settingsRepository: SettingsRepository
     val memoryRepository: MemoryRepository
     val chatRepository: ChatRepository
+    val notificationHelper: com.example.util.NotificationHelper
     val networkMonitor: NetworkMonitor
 }
 
@@ -31,6 +30,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val memoryRepository: MemoryRepository by lazy {
         MemoryRepository(database.memoryDao())
+    }
+
+    override val notificationHelper: com.example.util.NotificationHelper by lazy {
+        com.example.util.NotificationHelper(context)
     }
 
     override val chatRepository: ChatRepository by lazy {

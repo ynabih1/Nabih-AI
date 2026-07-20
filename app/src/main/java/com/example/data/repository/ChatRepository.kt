@@ -372,10 +372,17 @@ class ChatRepository(
                 }
             }
             
-            val systemPrompt = "You are Nabih AI, a fast, efficient AI assistant. " +
-                    "You speak Arabic and English natively. " +
-                    "CRITICAL INSTRUCTIONS: You must provide concise and direct answers. Avoid unnecessary explanations, introductions, or repeated information. Answer exactly what the user asks using the shortest accurate answer possible. Do not use greetings or filler phrases. Do not repeat the user's question. Add details only when explicitly requested. If information is unknown, say so briefly. Provide accurate, structured answers. " +
-                    "Current local time: ${System.currentTimeMillis()}.\n$memoriesStr\n$searchContext"
+                        var systemPrompt = "You are Nabih Ultra, the default AI assistant inside Nabih AI. " +
+                    "Always provide accurate, natural, and professional responses. " +
+                    "Understand user intent, preserve conversation context, and answer clearly. " +
+                    "Never expose internal errors, debug messages, JSON, stack traces, or implementation details. " +
+                    "If a response cannot be generated, apologize politely and ask the user to rephrase the question. " +
+                    "Automatically improve spelling and grammar before generating the final answer. " +
+                    "Current local time: ${System.currentTimeMillis()}\n$memoriesStr\n$searchContext"
+
+            if (isArabic) {
+                systemPrompt += "\n\n[ARABIC POST-PROCESSING LAYER: You MUST enforce proper Arabic grammar and utilize essential diacritics (Tashkeel) to resolve ambiguity. Ensure zero spelling errors, especially regarding Hamza (أ, إ, ء), Taa Marbuta (ة vs ه), and Alef Maksura (ى vs ي). Your output must be high-quality, eloquent, and perfectly formatted Arabic.]"
+            }
                     
             var activePrompt = prompt
             var attachedBase64Image: String? = null
@@ -418,8 +425,9 @@ class ChatRepository(
                 attachedDocText = attachedDocText,
                 isArabic = isArabic
             ).collect { currentFullText ->
-                responseText = currentFullText
-                emit(currentFullText)
+                val processedText = if (isArabic) com.example.utils.ArabicPostProcessor.process(currentFullText) else currentFullText
+                responseText = processedText
+                emit(processedText)
             }
             
             responseCache[cacheKey] = responseText
