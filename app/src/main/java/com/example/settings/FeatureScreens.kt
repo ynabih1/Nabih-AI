@@ -37,6 +37,7 @@ fun GenericFeatureScreen(
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(title, fontWeight = FontWeight.Bold) },

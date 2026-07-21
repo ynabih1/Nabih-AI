@@ -478,7 +478,7 @@ suspend fun duplicateConversation(originalId: String): String = withContext(Disp
             )
         )
         try {
-            val response = com.example.data.remote.NetworkClient.geminiService.generateContent("gemini-2.5-flash-image", finalApiKey, req)
+            val response = com.example.data.remote.NetworkClient.geminiService.generateContent("gemini-1.5-flash", finalApiKey, req)
             response.candidates?.firstOrNull()?.content?.parts?.firstOrNull { it.inlineData != null }?.inlineData?.data
         } catch (e: Exception) {
             android.util.Log.e("ChatRepository", "Image Generation failed", e)

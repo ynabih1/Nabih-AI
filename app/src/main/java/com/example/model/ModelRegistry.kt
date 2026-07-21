@@ -62,7 +62,7 @@ object ModelRegistry {
             fallbackModelId = "nabih-ultra"
         ),
         ModelMetadata(
-            id = "gemini-2.5-pro",
+            id = "gemini-1.5-pro",
             displayName = "Gemini",
             provider = ApiProvider.GOOGLE,
             description = "Google's flagship model for advanced reasoning, coding, and complex tasks.",
@@ -109,7 +109,7 @@ object ModelRegistry {
         if (target == null) {
             // Check for deprecated mappings
             target = when (id) {
-                "gemini-flash-latest", "gemini-1.0-pro", "gemini-2.5-flash", "gemini-2.0-flash-thinking-exp" -> models.find { it.id == "gemini-2.5-pro" }
+                "gemini-flash-latest", "gemini-1.0-pro", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.0-flash-thinking-exp" -> models.find { it.id == "gemini-1.5-pro" }
                 "gpt-4o", "gpt-4-turbo", "gpt-5-mini", "gpt-5-nano" -> models.find { it.id == "gpt-5" }
                 "claude-3-5-sonnet", "claude-3-haiku", "claude-3-5-sonnet-latest" -> models.find { it.id == "claude-3-7-sonnet" }
                 else -> models.find { it.id == "nabih-ultra" }
@@ -281,8 +281,8 @@ object ModelRegistry {
                             version = "v2.0.2-live",
                             description = "Nabih AI's live native flagship model. Expanded capabilities, maximum speed, and free."
                         )
-                    } else if (model.id == "gemini-2.5-pro") {
-                        model.copy(version = "v2.5.1-live")
+                    } else if (model.id == "gemini-1.5-pro") {
+                        model.copy(version = "v1.5.1-live")
                     } else {
                         model
                     }

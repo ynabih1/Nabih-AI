@@ -391,6 +391,7 @@ object AiErrorTranslator {
         return when (code) {
             400 -> "حدث خطأ في تنسيق الطلب، حاول مرة أخرى"
             401, 403 -> "مفتاح API غير صالح أو منتهي الصلاحية، تحقق من إعدادات المفاتيح"
+            404 -> "الموديل المطلوب غير متاح حالياً، جرّب موديلاً آخر من القائمة"
             429 -> "تم تجاوز الحد المسموح من الطلبات لهذا المزود، حاول لاحقاً أو استخدم موديل آخر"
             500, 502, 503, 504 -> "خدمة [$providerNameAr] غير متاحة مؤقتاً، حاول مرة أخرى بعد قليل"
             -1 -> "استغرق الرد وقتاً أطول من المتوقع، تحقق من اتصالك وحاول مرة أخرى"
@@ -407,6 +408,7 @@ object AiErrorTranslator {
                     when (throwable.code()) {
                         400 -> "Bad request (400). Please check your input parameters or model configuration."
                         401, 403 -> "Unauthorized or invalid API Key (401/403). Please verify your key in Settings."
+                        404 -> "Model not found or currently unavailable (404). Please select a different model from the list."
                         429 -> "Rate limit exceeded (429). Please wait a moment before trying again."
                         500, 502, 503, 504 -> "Service internal error (${throwable.code()}). Please try again later."
                         else -> "Unexpected provider error (${throwable.code()})."
@@ -436,6 +438,8 @@ object AiErrorTranslator {
                 val msg = throwable.localizedMessage ?: throwable.message ?: ""
                 if (msg.contains("429")) {
                     mapApiErrorToUserMessage(429, provider)
+                } else if (msg.contains("404")) {
+                    mapApiErrorToUserMessage(404, provider)
                 } else if (msg.contains("401") || msg.contains("403")) {
                     mapApiErrorToUserMessage(401, provider)
                 } else if (msg.contains("400")) {
@@ -472,12 +476,28 @@ object AiRouter {
         var targetModelId = registryModel.id
 
         if (actualProviderType == ApiProvider.NABIH) {
-            // Nabih Ultra logic: find any available key!
+            // Nabih Ultra logic: prioritize its own key, then find any available key!
             when {
+                settings.nabihApiKey.isNotBlank() -> {
+                    val key = settings.nabihApiKey.trim()
+                    if (key.startsWith("sk-ant-")) {
+                        actualProviderType = ApiProvider.ANTHROPIC
+                        currentApiKey = key
+                        targetModelId = "claude-3-7-sonnet-20250219"
+                    } else if (key.startsWith("sk-")) {
+                        actualProviderType = ApiProvider.OPENAI
+                        currentApiKey = key
+                        targetModelId = "gpt-4o"
+                    } else {
+                        actualProviderType = ApiProvider.GOOGLE
+                        currentApiKey = key
+                        targetModelId = "gemini-1.5-pro"
+                    }
+                }
                 settings.googleApiKey.isNotBlank() -> {
                     actualProviderType = ApiProvider.GOOGLE
                     currentApiKey = settings.googleApiKey
-                    targetModelId = "gemini-2.5-pro"
+                    targetModelId = "gemini-1.5-pro"
                 }
                 settings.openaiApiKey.isNotBlank() -> {
                     actualProviderType = ApiProvider.OPENAI
@@ -489,15 +509,10 @@ object AiRouter {
                     currentApiKey = settings.anthropicApiKey
                     targetModelId = "claude-3-7-sonnet-20250219"
                 }
-                settings.nabihApiKey.isNotBlank() -> {
-                    actualProviderType = ApiProvider.GOOGLE
-                    currentApiKey = settings.nabihApiKey
-                    targetModelId = "gemini-2.5-pro"
-                }
                 com.example.BuildConfig.GEMINI_API_KEY.isNotBlank() && !com.example.BuildConfig.GEMINI_API_KEY.contains("YOUR_") -> {
                     actualProviderType = ApiProvider.GOOGLE
                     currentApiKey = com.example.BuildConfig.GEMINI_API_KEY
-                    targetModelId = "gemini-2.5-pro"
+                    targetModelId = "gemini-1.5-pro"
                 }
             }
         } else {
@@ -521,21 +536,38 @@ object AiRouter {
 
         val modelsToTry = mutableListOf<String>()
         if (isGeminiRequest) {
-            modelsToTry.add(targetModelId)
-            val candidates = listOf("gemini-2.5-pro", "gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro")
+            if (targetModelId != "nabih-ultra" && targetModelId != "gemini") {
+                modelsToTry.add(targetModelId)
+            }
+            val candidates = listOf("gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro", "gemini-pro")
             candidates.forEach { cand ->
                 if (cand != targetModelId && !modelsToTry.contains(cand)) {
                     modelsToTry.add(cand)
                 }
             }
         } else {
-            modelsToTry.add(targetModelId)
+            val mappedModelId = when {
+                actualProviderType == ApiProvider.OPENAI && (targetModelId.contains("gpt-5") || targetModelId == "chatgpt" || targetModelId == "gpt-4o" || targetModelId == "nabih-ultra") -> "gpt-4o"
+                actualProviderType == ApiProvider.ANTHROPIC && (targetModelId.contains("claude-3-7") || targetModelId == "claude" || targetModelId == "nabih-ultra") -> "claude-3-7-sonnet-20250219"
+                else -> targetModelId
+            }
+            modelsToTry.add(mappedModelId)
+            
+            // Add fallbacks
+            if (actualProviderType == ApiProvider.OPENAI) {
+                val fallbacks = listOf("gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo")
+                fallbacks.forEach { if (!modelsToTry.contains(it)) modelsToTry.add(it) }
+            } else if (actualProviderType == ApiProvider.ANTHROPIC) {
+                val fallbacks = listOf("claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-haiku-20240307")
+                fallbacks.forEach { if (!modelsToTry.contains(it)) modelsToTry.add(it) }
+            }
         }
 
         var success = false
         var lastException: Throwable? = null
 
         for (modelId in modelsToTry) {
+            if (com.example.BuildConfig.DEBUG) android.util.Log.d("NabihUltraDebug", "Model name used: $modelId")
             val maxRetries = 3
             var currentTry = 0
             var modelSuccess = false
@@ -592,7 +624,7 @@ object AiRouter {
                     lastException = e
                     android.util.Log.e("AiRouter", "API Request failed on try $currentTry for model $modelId", e)
 
-                    val isAuthError = e is HttpException && (e.code() == 401 || e.code() == 403)
+                    val isAuthError = e is HttpException && (e.code() == 401 || e.code() == 403 || e.code() == 404)
                     if (isAuthError) {
                         break
                     }
@@ -616,8 +648,13 @@ object AiRouter {
         }
 
         if (!success) {
-            val translatedError = lastException?.let { AiErrorTranslator.translate(throwable = it, isArabic = isArabic) }
-                ?: (if (isArabic) "فشلت عملية الاتصال بمزود الذكاء الاصطناعي." else "Failed to connect to AI provider.")
+            val translatedError = lastException?.let { e -> 
+                var msg = AiErrorTranslator.translate(throwable = e, isArabic = isArabic)
+                if (e is retrofit2.HttpException && e.code() == 404) {
+                    msg = "$msg (Tried: ${modelsToTry.joinToString()})"
+                }
+                msg
+            } ?: (if (isArabic) "فشلت عملية الاتصال بمزود الذكاء الاصطناعي." else "Failed to connect to AI provider.")
             throw Exception(translatedError)
         }
     }

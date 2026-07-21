@@ -24,7 +24,7 @@ enum class AiModel(
         supportsDocuments = true
     ),
     GEMINI(
-        id = "gemini-2.5-pro",
+        id = "gemini-1.5-pro",
         displayName = "Gemini",
         provider = ApiProvider.GOOGLE,
         description = "Google's flagship model for advanced reasoning, coding, and complex tasks.",

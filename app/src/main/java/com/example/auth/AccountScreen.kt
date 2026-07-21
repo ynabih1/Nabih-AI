@@ -277,6 +277,7 @@ fun AccountScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(if (isArabic) "الملف الشخصي" else "Profile", fontWeight = FontWeight.Bold) },

@@ -464,20 +464,10 @@ fun MainScreen(
             )
         }
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surface
-                    )
-                )
-            )
-        )
         Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             contentWindowInsets = WindowInsets.safeDrawing,
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
                     title = {},
@@ -487,12 +477,11 @@ fun MainScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
+                        containerColor = MaterialTheme.colorScheme.background,
                         titleContentColor = MaterialTheme.colorScheme.onBackground
                     )
                 )
-            },
-            containerColor = Color.Transparent
+            }
         ) { paddingValues ->
             Column(
                 modifier = Modifier
@@ -801,7 +790,7 @@ fun EmptyChatState(isArabic: Boolean) {
         )
         Spacer(modifier = Modifier.height(32.dp))
         Text(
-            text = if (isArabic) "مرحباً! كيف يمكنني مساعدتك اليوم؟" else "Hello! How can I help you today?",
+            text = if (isArabic) "كيف يمكنني مساعدتك اليوم؟" else "How can I help you today?",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
@@ -1111,7 +1100,7 @@ fun MessageItem(
         ) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.surface
+                color = MaterialTheme.colorScheme.background // AppBackground
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Top Bar
@@ -1142,7 +1131,7 @@ fun MessageItem(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .background(MaterialTheme.colorScheme.surfaceVariant) // Same as SurfaceElevated
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1163,59 +1152,78 @@ fun MessageItem(
                     Spacer(modifier = Modifier.weight(1f))
 
                     // Text Input Area
-                    Row(
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 16.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.Bottom
+                            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 8.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                        color = MaterialTheme.colorScheme.surface
                     ) {
-                        IconButton(
-                            onClick = { /* Do nothing for now */ },
-                            modifier = Modifier.size(40.dp)
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Add,
-                                contentDescription = "Add",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 8.dp)
-                                .heightIn(min = 40.dp, max = 120.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            androidx.compose.foundation.text.BasicTextField(
-                                value = editMessageText,
-                                onValueChange = { editMessageText = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
-                                maxLines = 5
-                            )
-                        }
-                        
-                        IconButton(
-                            onClick = {
-                                onEdit(editMessageText)
-                                showEditDialog = false
-                            },
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(androidx.compose.foundation.shape.CircleShape)
-                                .background(MaterialTheme.colorScheme.primary)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.ArrowUpward,
-                                contentDescription = "Send",
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 16.dp, bottom = 4.dp)
+                                    .heightIn(min = 40.dp, max = 200.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                androidx.compose.foundation.text.BasicTextField(
+                                    value = editMessageText,
+                                    onValueChange = { editMessageText = it },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                                    cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                                    maxLines = 8
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 8.dp, end = 8.dp, bottom = 8.dp, top = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Add button (disabled for edit)
+                                IconButton(
+                                    onClick = { },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Add,
+                                        contentDescription = "Add",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.weight(1f))
+                                
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(if (editMessageText.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                                        .clickable(
+                                            enabled = editMessageText.isNotBlank(),
+                                            onClick = {
+                                                onEdit(editMessageText)
+                                                showEditDialog = false
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.ArrowUpward,
+                                        contentDescription = "Save",
+                                        tint = if (editMessageText.isNotBlank()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1471,19 +1479,39 @@ fun MessageItem(
 // Beautifully format URI sizes for display in composer
 fun getUriSizeFormatted(context: android.content.Context, uri: android.net.Uri): String {
     try {
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
-            if (cursor.moveToFirst() && sizeIndex >= 0) {
-                val sizeBytes = cursor.getLong(sizeIndex)
-                return when {
-                    sizeBytes >= 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f MB", sizeBytes.toFloat() / (1024 * 1024))
-                    sizeBytes >= 1024 -> "${sizeBytes / 1024} KB"
-                    else -> "$sizeBytes B"
+        if (com.example.BuildConfig.DEBUG) {
+            android.util.Log.d("UploadDebug", "getUriSizeFormatted called for: $uri with scheme: ${uri.scheme}")
+        }
+        var sizeBytes = 0L
+        if (uri.scheme == "file") {
+            val file = java.io.File(uri.path ?: "")
+            if (file.exists()) {
+                sizeBytes = file.length()
+            }
+        } else {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                if (cursor.moveToFirst() && sizeIndex >= 0) {
+                    sizeBytes = cursor.getLong(sizeIndex)
                 }
             }
         }
+        
+        if (com.example.BuildConfig.DEBUG) {
+            android.util.Log.d("UploadDebug", "Calculated File size in bytes: $sizeBytes")
+        }
+
+        if (sizeBytes > 0) {
+            return when {
+                sizeBytes >= 1024 * 1024 -> String.format(java.util.Locale.US, "%.1f MB", sizeBytes.toFloat() / (1024 * 1024))
+                sizeBytes >= 1024 -> "${sizeBytes / 1024} KB"
+                else -> "$sizeBytes B"
+            }
+        }
     } catch (e: Exception) {
-        // Fallback
+        if (com.example.BuildConfig.DEBUG) {
+            android.util.Log.e("UploadDebug", "Error calculating file size", e)
+        }
     }
     return "0 KB"
 }
@@ -1671,7 +1699,7 @@ fun BottomInputArea(
                 .fillMaxWidth()
                 .animateContentSize(),
             shape = RoundedCornerShape(28.dp),
-            shadowElevation = 8.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
             color = MaterialTheme.colorScheme.surface
         ) {
             Column(
@@ -1757,7 +1785,6 @@ fun BottomInputArea(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             CircularProgressIndicator(
-                                                progress = attachProgress,
                                                 modifier = Modifier.size(24.dp),
                                                 strokeWidth = 2.dp,
                                                 color = MaterialTheme.colorScheme.primary
@@ -1841,7 +1868,6 @@ fun BottomInputArea(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             CircularProgressIndicator(
-                                                progress = attachProgress,
                                                 modifier = Modifier.size(24.dp),
                                                 strokeWidth = 2.dp,
                                                 color = MaterialTheme.colorScheme.primary
@@ -2554,22 +2580,14 @@ fun MainDrawerContent(
                 }
             }
             
-            // Clear line/divider separating Group 2 and the sticky Group 3 footer
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            
             // Sticky Bottom Section (Group 3)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
                     .navigationBarsPadding()
-                    .padding(vertical = 16.dp),
+                    .padding(bottom = 16.dp, top = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp)
-                )
 
                 // 1. API Keys Shortcut
                 DrawerMenuItem(
@@ -2578,12 +2596,6 @@ fun MainDrawerContent(
                     isSelected = false,
                     onClick = { onNavigateTo("api_keys"); onCloseDrawer() },
                     isArabic = isArabic
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                    modifier = Modifier.padding(horizontal = 32.dp)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -2684,10 +2696,6 @@ fun MainDrawerContent(
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                    modifier = Modifier.padding(horizontal = 32.dp)
-                )
                 Spacer(modifier = Modifier.height(4.dp))
 
                 // 3. Settings Item

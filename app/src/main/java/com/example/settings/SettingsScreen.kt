@@ -68,6 +68,7 @@ fun SettingsScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(if (isArabic) "الإعدادات" else "Settings", fontWeight = FontWeight.Bold) },
@@ -163,7 +164,7 @@ fun AiConfigurationSection(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(bottom = 100.dp)
+                .padding(bottom = 24.dp)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -175,11 +176,17 @@ fun AiConfigurationSection(
                 onSaveKey = { key ->
                     nabihKey = key
                     viewModel.saveApiKeys(key, googleKey, openaiKey, anthropicKey)
+                    coroutineScope.launch { com.example.model.ModelRegistry.syncAndRefresh(context) }
                 },
                 isArabic = isArabic,
                 isDefault = true,
                 snackbarHostState = snackbarHostState,
-                onKeyChange = { nabihKey = it }
+                onKeyChange = { nabihKey = it },
+                onDeleteKey = {
+                    nabihKey = ""
+                    viewModel.saveApiKeys("", googleKey, openaiKey, anthropicKey)
+                    coroutineScope.launch { com.example.model.ModelRegistry.syncAndRefresh(context) }
+                }
             )
             
             ApiKeyCard(
@@ -190,11 +197,17 @@ fun AiConfigurationSection(
                 onSaveKey = { key ->
                     openaiKey = key
                     viewModel.saveApiKeys(nabihKey, googleKey, key, anthropicKey)
+                    coroutineScope.launch { com.example.model.ModelRegistry.syncAndRefresh(context) }
                 },
                 isArabic = isArabic,
                 isDefault = false,
                 snackbarHostState = snackbarHostState,
-                onKeyChange = { openaiKey = it }
+                onKeyChange = { openaiKey = it },
+                onDeleteKey = {
+                    openaiKey = ""
+                    viewModel.saveApiKeys(nabihKey, googleKey, "", anthropicKey)
+                    coroutineScope.launch { com.example.model.ModelRegistry.syncAndRefresh(context) }
+                }
             )
             
             ApiKeyCard(
@@ -205,11 +218,17 @@ fun AiConfigurationSection(
                 onSaveKey = { key ->
                     anthropicKey = key
                     viewModel.saveApiKeys(nabihKey, googleKey, openaiKey, key)
+                    coroutineScope.launch { com.example.model.ModelRegistry.syncAndRefresh(context) }
                 },
                 isArabic = isArabic,
                 isDefault = false,
                 snackbarHostState = snackbarHostState,
-                onKeyChange = { anthropicKey = it }
+                onKeyChange = { anthropicKey = it },
+                onDeleteKey = {
+                    anthropicKey = ""
+                    viewModel.saveApiKeys(nabihKey, googleKey, openaiKey, "")
+                    coroutineScope.launch { com.example.model.ModelRegistry.syncAndRefresh(context) }
+                }
             )
             
             ApiKeyCard(
@@ -220,64 +239,18 @@ fun AiConfigurationSection(
                 onSaveKey = { key ->
                     googleKey = key
                     viewModel.saveApiKeys(nabihKey, key, openaiKey, anthropicKey)
+                    coroutineScope.launch { com.example.model.ModelRegistry.syncAndRefresh(context) }
                 },
                 isArabic = isArabic,
                 isDefault = false,
                 snackbarHostState = snackbarHostState,
-                onKeyChange = { googleKey = it }
+                onKeyChange = { googleKey = it },
+                onDeleteKey = {
+                    googleKey = ""
+                    viewModel.saveApiKeys(nabihKey, "", openaiKey, anthropicKey)
+                    coroutineScope.launch { com.example.model.ModelRegistry.syncAndRefresh(context) }
+                }
             )
-        }
-        
-        // Sticky Bottom Bar
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .shadow(elevation = 8.dp, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { 
-                        nabihKey = settings.nabihApiKey
-                        openaiKey = settings.openaiApiKey
-                        anthropicKey = settings.anthropicApiKey
-                        googleKey = settings.googleApiKey
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(if (isArabic) "إلغاء" else "Cancel", fontWeight = FontWeight.SemiBold)
-                }
-                
-                Button(
-                    onClick = {
-                        coroutineScope.launch {
-                            viewModel.saveApiKeys(nabihKey, googleKey, openaiKey, anthropicKey)
-                            com.example.model.ModelRegistry.syncAndRefresh(context)
-                            snackbarHostState.showSnackbar(
-                                message = if (isArabic) "تم حفظ الكل" else "All keys saved",
-                                duration = SnackbarDuration.Short
-                            )
-                        }
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(0.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(if (isArabic) "حفظ الكل" else "Save All", fontWeight = FontWeight.SemiBold)
-                }
-            }
         }
     }
 }
@@ -365,7 +338,8 @@ fun ApiKeyCard(
     isArabic: Boolean,
     isDefault: Boolean = false,
     snackbarHostState: SnackbarHostState,
-    onKeyChange: (String) -> Unit
+    onKeyChange: (String) -> Unit,
+    onDeleteKey: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     var tempKey by remember(initialKey) { mutableStateOf(initialKey) }
@@ -408,13 +382,41 @@ fun ApiKeyCard(
     val border = when {
         isDefault -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
         isConnected -> BorderStroke(1.5.dp, Color(0xFFC4EAD3))
-        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        else -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     }
 
     val containerColor = if (isDefault) {
         MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f)
     } else {
         MaterialTheme.colorScheme.surface
+    }
+
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text(if (isArabic) "حذف المفتاح" else "Delete Key") },
+            text = { Text(if (isArabic) "هل تريد حذف مفتاح $name؟" else "Are you sure you want to delete the $name key?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        onDeleteKey()
+                        tempKey = ""
+                        isVerified = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(if (isArabic) "حذف" else "Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text(if (isArabic) "إلغاء" else "Cancel")
+                }
+            }
+        )
     }
 
     Card(
@@ -532,7 +534,7 @@ fun ApiKeyCard(
             ) {
                 val verifyButtonBgColor by animateColorAsState(
                     targetValue = if (tempKey.isNotBlank() && !isVerifying) {
-                        MaterialTheme.colorScheme.primaryContainer
+                        MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
                     },
@@ -540,7 +542,7 @@ fun ApiKeyCard(
                 )
                 val verifyButtonTextColor by animateColorAsState(
                     targetValue = if (tempKey.isNotBlank() && !isVerifying) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
+                        MaterialTheme.colorScheme.onPrimary
                     } else {
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                     },
@@ -581,7 +583,7 @@ fun ApiKeyCard(
                 ) {
                     if (isVerifying) {
                         CircularProgressIndicator(
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(18.dp),
                             strokeWidth = 2.dp
                         )
@@ -591,7 +593,7 @@ fun ApiKeyCard(
                 }
                 
                 val saveButtonBgColor by animateColorAsState(
-                    targetValue = if (tempKey.isNotBlank() && !isVerifying) {
+                    targetValue = if (tempKey.isNotBlank() && isVerified && !isVerifying) {
                         MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
@@ -599,14 +601,13 @@ fun ApiKeyCard(
                     animationSpec = tween(durationMillis = 300)
                 )
                 val saveButtonTextColor by animateColorAsState(
-                    targetValue = if (tempKey.isNotBlank() && !isVerifying) {
+                    targetValue = if (tempKey.isNotBlank() && isVerified && !isVerifying) {
                         MaterialTheme.colorScheme.onPrimary
                     } else {
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                     },
                     animationSpec = tween(durationMillis = 300)
                 )
-
                 Button(
                     onClick = {
                         coroutineScope.launch {
@@ -617,7 +618,7 @@ fun ApiKeyCard(
                             )
                         }
                     },
-                    enabled = tempKey.isNotBlank() && !isVerifying,
+                    enabled = tempKey.isNotBlank() && isVerified && !isVerifying,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = saveButtonBgColor,
                         contentColor = saveButtonTextColor,
@@ -629,6 +630,20 @@ fun ApiKeyCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(if (isArabic) "حفظ" else "Save", fontWeight = FontWeight.SemiBold)
+                }
+                
+                if (savedKey.isNotBlank()) {
+                    IconButton(
+                        onClick = { showDeleteConfirmDialog = true },
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(16.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Delete,
+                            contentDescription = if (isArabic) "حذف المفتاح" else "Delete Key",
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
                 }
             }
         }
@@ -659,12 +674,33 @@ suspend fun testApiKeyConnection(provider: String, key: String): Boolean = kotli
                 .header("anthropic-version", "2023-06-01")
                 .post(okhttp3.RequestBody.create(null, ByteArray(0)))
                 .build()
+            "nabih" -> {
+                if (key.startsWith("sk-ant-")) {
+                    okhttp3.Request.Builder()
+                        .url("https://api.anthropic.com/v1/messages")
+                        .header("x-api-key", key)
+                        .header("anthropic-version", "2023-06-01")
+                        .post(okhttp3.RequestBody.create(null, ByteArray(0)))
+                        .build()
+                } else if (key.startsWith("sk-")) {
+                    okhttp3.Request.Builder()
+                        .url("https://api.openai.com/v1/models")
+                        .header("Authorization", "Bearer $key")
+                        .get()
+                        .build()
+                } else {
+                    okhttp3.Request.Builder()
+                        .url("https://generativelanguage.googleapis.com/v1beta/models?key=$key")
+                        .get()
+                        .build()
+                }
+            }
             else -> return@withContext false
         }
         
         val response = client.newCall(request).execute()
         
-        if (provider == "claude") {
+        if (provider == "claude" || (provider == "nabih" && key.startsWith("sk-ant-"))) {
             response.code != 401 && response.code != 403
         } else {
             response.isSuccessful

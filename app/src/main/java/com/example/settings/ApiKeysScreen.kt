@@ -27,6 +27,7 @@ fun ApiKeysScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(if (isArabic) "مفاتيح API" else "API Keys", fontWeight = FontWeight.Bold) },

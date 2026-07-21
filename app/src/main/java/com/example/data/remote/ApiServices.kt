@@ -220,6 +220,22 @@ object NetworkClient {
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .addInterceptor(loggingInterceptor)
+        .addInterceptor { chain ->
+            val request = chain.request()
+            if (com.example.BuildConfig.DEBUG) {
+                android.util.Log.d("NabihUltraDebug", "Full request URL: ${request.url}")
+                val buffer = okio.Buffer()
+                request.body?.writeTo(buffer)
+                android.util.Log.d("NabihUltraDebug", "Request body: ${buffer.readUtf8()}")
+            }
+            val response = chain.proceed(request)
+            if (com.example.BuildConfig.DEBUG) {
+                android.util.Log.d("NabihUltraDebug", "Response code: ${response.code}")
+                val responseBody = response.peekBody(Long.MAX_VALUE)
+                android.util.Log.d("NabihUltraDebug", "Response body: ${responseBody.string()}")
+            }
+            response
+        }
         .build()
 
     val geminiService: GeminiApiService by lazy {
