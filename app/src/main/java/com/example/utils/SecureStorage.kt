@@ -1,44 +1,71 @@
 package com.example.utils
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import android.util.Log
 
-class SecureStorage(context: Context) {
-    private val masterKey = try {
-        MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-    } catch (e: Exception) {
-        Log.e("SecureStorage", "Failed to get or create MasterKey", e)
-        null
+class SecureStorage(private val context: Context) {
+    private val fallbackPrefs: SharedPreferences by lazy {
+        context.getSharedPreferences("secured_nabih_prefs_fallback", Context.MODE_PRIVATE)
     }
 
-    private val sharedPrefs by lazy {
+    private val encryptedPrefs: SharedPreferences? by lazy {
         try {
-            if (masterKey != null) {
-                EncryptedSharedPreferences.create(
-                    context,
-                    "secured_nabih_prefs",
-                    masterKey,
-                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-                )
-            } else {
-                throw Exception("MasterKey is null")
-            }
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context,
+                "secured_nabih_prefs",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
         } catch (e: Exception) {
-            Log.e("SecureStorage", "EncryptedSharedPreferences creation failed, falling back to private prefs", e)
-            context.getSharedPreferences("secured_nabih_prefs_fallback", Context.MODE_PRIVATE)
+            Log.e("SecureStorage", "EncryptedSharedPreferences creation failed, using fallback", e)
+            null
         }
     }
 
-    fun saveKey(keyName: String, keyValue: String) {
-        sharedPrefs.edit().putString(keyName, keyValue).apply()
+    fun saveKey(keyName: String, keyValue: String): Boolean {
+        val cleanValue = keyValue.trim()
+        var savedInEncrypted = false
+        try {
+            if (encryptedPrefs != null) {
+                encryptedPrefs?.edit()?.putString(keyName, cleanValue)?.apply()
+                savedInEncrypted = true
+            }
+        } catch (e: Exception) {
+            Log.e("SecureStorage", "Failed to save key in encryptedPrefs, saving to fallback", e)
+        }
+
+        return try {
+            fallbackPrefs.edit().putString(keyName, cleanValue).commit()
+            true
+        } catch (e: Exception) {
+            Log.e("SecureStorage", "Failed to save key in fallbackPrefs", e)
+            savedInEncrypted
+        }
     }
 
     fun getKey(keyName: String): String {
-        return sharedPrefs.getString(keyName, "") ?: ""
+        try {
+            val encryptedVal = encryptedPrefs?.getString(keyName, "")
+            if (!encryptedVal.isNullOrBlank()) {
+                return encryptedVal.trim()
+            }
+        } catch (e: Exception) {
+            Log.e("SecureStorage", "Failed to read key from encryptedPrefs, trying fallback", e)
+        }
+
+        return try {
+            fallbackPrefs.getString(keyName, "")?.trim() ?: ""
+        } catch (e: Exception) {
+            Log.e("SecureStorage", "Failed to read key from fallbackPrefs", e)
+            ""
+        }
     }
 }
+

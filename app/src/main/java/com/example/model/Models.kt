@@ -70,6 +70,17 @@ enum class ResponseStyle(val displayName: String) {
     BALANCED("Balanced"),
     DETAILED("Detailed")
 }
+
+enum class ReasoningMode(val displayName: String, val icon: String) {
+    AUTO("Auto Strategy", "🪄"),
+    FAST("Fast Direct", "⚡"),
+    BALANCED("Balanced", "⚖️"),
+    DEEP_THINKING("Deep Thinking", "🧠"),
+    RESEARCH("Deep Research", "🔍"),
+    CREATIVE("Creative Muse", "🎨"),
+    CODING("Coding Expert", "💻"),
+    TRANSLATION("Translator", "🌐")
+}
 enum class FontSize(val scale: Float, val displayName: String) {
     SMALL(0.85f, "Small"),
     MEDIUM(1.0f, "Medium"),

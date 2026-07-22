@@ -9,6 +9,11 @@ import retrofit2.HttpException
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import com.google.firebase.Firebase
+import com.google.firebase.ai.ai
+import com.google.firebase.ai.type.GenerativeBackend
+import com.google.firebase.ai.type.content
+import com.google.firebase.ai.type.generationConfig
 
 // --- 1. Provider Interface ---
 interface AiProvider {
@@ -34,6 +39,9 @@ interface AiProvider {
 }
 
 // --- 2. Gemini Provider Implementation ---
+/**
+ * تم التحول لـ Firebase AI Logic SDK بدلاً من REST calls اليدوية بسبب تغيير جوجل صيغة مفاتيح Gemini API (من AIzaSy إلى AQ.Ab) في يونيو 2026، والذي جعل الاستدعاء اليدوي غير موثوق.
+ */
 class GeminiProvider : AiProvider {
     override suspend fun generateResponse(
         modelId: String,
@@ -44,11 +52,10 @@ class GeminiProvider : AiProvider {
         attachedBase64Image: String?,
         attachedDocText: String?
     ): String {
-        val parts = mutableListOf<GeminiPart>()
-        parts.add(GeminiPart(text = prompt))
-        if (attachedBase64Image != null) {
-            parts.add(GeminiPart(inlineData = GeminiInlineData("image/jpeg", attachedBase64Image)))
-        }
+        val finalPrompt = if (attachedDocText != null) {
+            "Document Attached:\n$attachedDocText\n\n$prompt"
+        } else prompt
+
         val contents = mutableListOf<GeminiContent>()
         history.forEach { msg ->
             contents.add(GeminiContent(
@@ -56,15 +63,22 @@ class GeminiProvider : AiProvider {
                 parts = listOf(GeminiPart(text = msg.content))
             ))
         }
+
+        val parts = mutableListOf<GeminiPart>()
+        if (attachedBase64Image != null) {
+            parts.add(GeminiPart(inlineData = GeminiInlineData(mimeType = "image/jpeg", data = attachedBase64Image)))
+        }
+        parts.add(GeminiPart(text = finalPrompt))
         contents.add(GeminiContent(role = "user", parts = parts))
+
         val req = GeminiRequest(
             contents = contents,
-            systemInstruction = GeminiContent(role = "user", parts = listOf(GeminiPart(text = systemPrompt))),
+            systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = systemPrompt))),
             generationConfig = GeminiGenerationConfig(temperature = 0.7f)
         )
+
         val response = NetworkClient.geminiService.generateContent(modelId, apiKey, req)
-        return response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-            ?: throw Exception("No text generated")
+        return response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: throw Exception("رد فارغ من الموديل")
     }
 
     override fun generateResponseStream(
@@ -75,12 +89,11 @@ class GeminiProvider : AiProvider {
         history: List<Message>,
         attachedBase64Image: String?,
         attachedDocText: String?
-    ): Flow<String> = flow {
-        val parts = mutableListOf<GeminiPart>()
-        parts.add(GeminiPart(text = prompt))
-        if (attachedBase64Image != null) {
-            parts.add(GeminiPart(inlineData = GeminiInlineData("image/jpeg", attachedBase64Image)))
-        }
+    ): Flow<String> = kotlinx.coroutines.flow.flow {
+        val finalPrompt = if (attachedDocText != null) {
+            "Document Attached:\n$attachedDocText\n\n$prompt"
+        } else prompt
+
         val contents = mutableListOf<GeminiContent>()
         history.forEach { msg ->
             contents.add(GeminiContent(
@@ -88,37 +101,41 @@ class GeminiProvider : AiProvider {
                 parts = listOf(GeminiPart(text = msg.content))
             ))
         }
+
+        val parts = mutableListOf<GeminiPart>()
+        if (attachedBase64Image != null) {
+            parts.add(GeminiPart(inlineData = GeminiInlineData(mimeType = "image/jpeg", data = attachedBase64Image)))
+        }
+        parts.add(GeminiPart(text = finalPrompt))
         contents.add(GeminiContent(role = "user", parts = parts))
+
         val req = GeminiRequest(
             contents = contents,
-            systemInstruction = GeminiContent(role = "user", parts = listOf(GeminiPart(text = systemPrompt))),
+            systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = systemPrompt))),
             generationConfig = GeminiGenerationConfig(temperature = 0.7f)
         )
 
         try {
             val responseBody = NetworkClient.geminiService.generateContentStream(modelId, apiKey, req)
             val reader = responseBody.byteStream().bufferedReader()
-            val stringBuilder = java.lang.StringBuilder()
-            var accumulated = ""
-            var previouslyProcessedBlocks = 0
-            val buffer = CharArray(4096)
-            var readChars: Int
-            while (reader.read(buffer).also { readChars = it } != -1) {
-                val chunk = String(buffer, 0, readChars)
-                accumulated += chunk
-                try {
-                    val textToken = "\"text\":"
-                    var startIndex = 0
-                    var parsedBlocks = 0
-                    while (true) {
-                        val index = accumulated.indexOf(textToken, startIndex)
-                        if (index == -1) break
-                        val valStart = accumulated.indexOf('"', index + textToken.length)
-                        if (valStart == -1) break
-                        var valEnd = valStart + 1
+            var line: String?
+            var receivedAny = false
+            while (reader.readLine().also { line = it } != null) {
+                var l = line?.trim() ?: continue
+                if (l.isEmpty()) continue
+                if (l.startsWith("data:")) {
+                    l = l.substring(5).trim()
+                }
+
+                val textToken = "\"text\":"
+                var index = l.indexOf(textToken)
+                while (index != -1) {
+                    val valQuoteStart = l.indexOf('"', index + textToken.length)
+                    if (valQuoteStart != -1) {
+                        var valEnd = valQuoteStart + 1
                         var escaped = false
-                        while (valEnd < accumulated.length) {
-                            val c = accumulated[valEnd]
+                        while (valEnd < l.length) {
+                            val c = l[valEnd]
                             if (escaped) {
                                 escaped = false
                             } else if (c == '\\') {
@@ -128,28 +145,24 @@ class GeminiProvider : AiProvider {
                             }
                             valEnd++
                         }
-                        if (valEnd < accumulated.length) {
-                            val rawText = accumulated.substring(valStart + 1, valEnd)
+                        if (valEnd < l.length) {
+                            val rawText = l.substring(valQuoteStart + 1, valEnd)
                             val unescaped = unescapeJsonString(rawText)
-                            if (parsedBlocks >= previouslyProcessedBlocks) {
-                                stringBuilder.append(unescaped)
+                            if (unescaped.isNotEmpty()) {
                                 emit(unescaped)
-                                previouslyProcessedBlocks++
+                                receivedAny = true
                             }
-                            parsedBlocks++
                         }
-                        startIndex = index + textToken.length
                     }
-                } catch (e: Exception) {
-                    // Non-blocking JSON chunk parsing
+                    index = l.indexOf(textToken, index + 1)
                 }
             }
-            if (stringBuilder.isEmpty()) {
+            if (!receivedAny) {
                 val fallback = generateResponse(modelId, apiKey, systemPrompt, prompt, history, attachedBase64Image, attachedDocText)
                 emit(fallback)
             }
         } catch (e: Exception) {
-            // Fallback simulated typing stream
+            // Graceful typing fallback
             val fallback = generateResponse(modelId, apiKey, systemPrompt, prompt, history, attachedBase64Image, attachedDocText)
             var currentLen = 0
             val chunkSize = 4
@@ -379,104 +392,28 @@ object AiProviderFactory {
 }
 
 // --- 6. Unified Error Handling System ---
-object AiErrorTranslator {
-    fun mapApiErrorToUserMessage(code: Int, provider: String): String {
-        val providerNameAr = when (provider.lowercase()) {
-            "gemini", "google" -> "Gemini"
-            "claude", "anthropic" -> "Claude"
-            "chatgpt", "openai" -> "ChatGPT"
-            "nabih", "nabih-ultra" -> "Nabih Ultra"
-            else -> provider
-        }
-        return when (code) {
-            400 -> "حدث خطأ في تنسيق الطلب، حاول مرة أخرى"
-            401, 403 -> "مفتاح API غير صالح أو منتهي الصلاحية، تحقق من إعدادات المفاتيح"
-            404 -> "الموديل المطلوب غير متاح حالياً، جرّب موديلاً آخر من القائمة"
-            429 -> "تم تجاوز الحد المسموح من الطلبات لهذا المزود، حاول لاحقاً أو استخدم موديل آخر"
-            500, 502, 503, 504 -> "خدمة [$providerNameAr] غير متاحة مؤقتاً، حاول مرة أخرى بعد قليل"
-            -1 -> "استغرق الرد وقتاً أطول من المتوقع، تحقق من اتصالك وحاول مرة أخرى"
-            else -> "حدث خطأ غير متوقع ($code) أثناء الاتصال بـ $providerNameAr، يرجى المحاولة لاحقاً."
-        }
-    }
 
-    fun translate(throwable: Throwable, provider: String = "الذكاء الاصطناعي", isArabic: Boolean = false): String {
-        if (!isArabic) {
-            return when (throwable) {
-                is SocketTimeoutException -> "Connection timed out. Please try again later."
-                is UnknownHostException, is IOException -> "Network failure. Please check your internet connection and try again."
-                is HttpException -> {
-                    when (throwable.code()) {
-                        400 -> "Bad request (400). Please check your input parameters or model configuration."
-                        401, 403 -> "Unauthorized or invalid API Key (401/403). Please verify your key in Settings."
-                        404 -> "Model not found or currently unavailable (404). Please select a different model from the list."
-                        429 -> "Rate limit exceeded (429). Please wait a moment before trying again."
-                        500, 502, 503, 504 -> "Service internal error (${throwable.code()}). Please try again later."
-                        else -> "Unexpected provider error (${throwable.code()})."
-                    }
-                }
-                else -> {
-                    val msg = throwable.localizedMessage ?: throwable.message ?: ""
-                    if (msg.contains("VALIDATION_FAILED")) {
-                        "Sorry, I couldn't understand your request. Please try rephrasing your question."
-                    } else {
-                        msg.ifBlank { "An unknown error occurred." }
-                    }
-                }
-            }
-        }
-        return when (throwable) {
-            is SocketTimeoutException -> {
-                mapApiErrorToUserMessage(-1, provider)
-            }
-            is UnknownHostException, is IOException -> {
-                "فشل الاتصال بالإنترنت. يرجى التحقق من اتصالك والمحاولة مرة أخرى."
-            }
-            is HttpException -> {
-                mapApiErrorToUserMessage(throwable.code(), provider)
-            }
-            else -> {
-                val msg = throwable.localizedMessage ?: throwable.message ?: ""
-                if (msg.contains("429")) {
-                    mapApiErrorToUserMessage(429, provider)
-                } else if (msg.contains("404")) {
-                    mapApiErrorToUserMessage(404, provider)
-                } else if (msg.contains("401") || msg.contains("403")) {
-                    mapApiErrorToUserMessage(401, provider)
-                } else if (msg.contains("400")) {
-                    mapApiErrorToUserMessage(400, provider)
-                } else if (msg.contains("500") || msg.contains("502") || msg.contains("503") || msg.contains("504")) {
-                    mapApiErrorToUserMessage(500, provider)
-                } else if (msg.contains("timeout") || msg.contains("Timeout") || msg.contains("SocketTimeout")) {
-                    mapApiErrorToUserMessage(-1, provider)
-                } else if (msg.contains("VALIDATION_FAILED")) {
-                    "عذراً، لم أتمكن من فهم طلبك. يرجى إعادة صياغة السؤال."
-                } else {
-                    msg.ifBlank { "حدث خطأ غير معروف أثناء الاتصال بالمزود." }
-                }
-            }
-        }
-    }
-}
-
-// --- 7. Unified Routing Engine ---
+// --- 8. Unified Routing Engine ---
 object AiRouter {
     fun routeStreaming(
         context: android.content.Context,
-        registryModel: ModelMetadata,
+        registryModel: com.example.model.ModelMetadata,
         settings: com.example.model.AppSettings,
         systemPrompt: String,
         prompt: String,
-        history: List<Message>,
+        history: List<com.example.data.local.Message>,
         attachedBase64Image: String? = null,
         attachedDocText: String? = null,
         isArabic: Boolean = false
     ): Flow<String> = flow {
+        val tStart = System.currentTimeMillis()
+        android.util.Log.d("PerfDebug", "1. routeStreaming started at $tStart")
+        val isNabihRequest = registryModel.provider == ApiProvider.NABIH || registryModel.id == "nabih-ultra"
         var actualProviderType = registryModel.provider
         var currentApiKey = ""
         var targetModelId = registryModel.id
 
         if (actualProviderType == ApiProvider.NABIH) {
-            // Nabih Ultra logic: prioritize its own key, then find any available key!
             when {
                 settings.nabihApiKey.isNotBlank() -> {
                     val key = settings.nabihApiKey.trim()
@@ -496,52 +433,59 @@ object AiRouter {
                 }
                 settings.googleApiKey.isNotBlank() -> {
                     actualProviderType = ApiProvider.GOOGLE
-                    currentApiKey = settings.googleApiKey
+                    currentApiKey = settings.googleApiKey.trim()
                     targetModelId = "gemini-1.5-pro"
                 }
                 settings.openaiApiKey.isNotBlank() -> {
                     actualProviderType = ApiProvider.OPENAI
-                    currentApiKey = settings.openaiApiKey
+                    currentApiKey = settings.openaiApiKey.trim()
                     targetModelId = "gpt-4o"
                 }
                 settings.anthropicApiKey.isNotBlank() -> {
                     actualProviderType = ApiProvider.ANTHROPIC
-                    currentApiKey = settings.anthropicApiKey
+                    currentApiKey = settings.anthropicApiKey.trim()
                     targetModelId = "claude-3-7-sonnet-20250219"
                 }
-                com.example.BuildConfig.GEMINI_API_KEY.isNotBlank() && !com.example.BuildConfig.GEMINI_API_KEY.contains("YOUR_") -> {
+                com.example.BuildConfig.GEMINI_API_KEY.isNotBlank() && 
+                !com.example.BuildConfig.GEMINI_API_KEY.contains("YOUR_") &&
+                !com.example.BuildConfig.GEMINI_API_KEY.contains("MY_GEMINI_") -> {
                     actualProviderType = ApiProvider.GOOGLE
-                    currentApiKey = com.example.BuildConfig.GEMINI_API_KEY
+                    currentApiKey = com.example.BuildConfig.GEMINI_API_KEY.trim()
                     targetModelId = "gemini-1.5-pro"
                 }
             }
         } else {
             currentApiKey = when (actualProviderType) {
-                ApiProvider.GOOGLE -> settings.googleApiKey.ifBlank { com.example.BuildConfig.GEMINI_API_KEY }
-                ApiProvider.OPENAI -> settings.openaiApiKey
-                ApiProvider.ANTHROPIC -> settings.anthropicApiKey
+                ApiProvider.GOOGLE -> settings.googleApiKey.ifBlank { com.example.BuildConfig.GEMINI_API_KEY }.trim()
+                ApiProvider.OPENAI -> settings.openaiApiKey.trim()
+                ApiProvider.ANTHROPIC -> settings.anthropicApiKey.trim()
                 else -> ""
             }
         }
 
-        val isGeminiRequest = actualProviderType == ApiProvider.GOOGLE
-        if (currentApiKey.isBlank() || currentApiKey == "MY_GEMINI_API_KEY" || currentApiKey.contains("YOUR_") || currentApiKey.contains("PLACEHOLDER")) {
+        val isKeyValid = currentApiKey.isNotBlank() && 
+                         !currentApiKey.contains("MY_GEMINI_API_KEY") && 
+                         !currentApiKey.contains("YOUR_") && 
+                         !currentApiKey.contains("PLACEHOLDER")
+
+        if (!isKeyValid) {
             val missingKeyMsg = if (isArabic) {
-                "مفتاح API غير متوفر. يرجى إضافة مفتاح API صحيح في الإعدادات للاستمرار."
+                "لا يوجد مفتاح API مُفعّل حالياً. يرجى إضافة مفتاح من شاشة الإعدادات لاستخدام النماذج."
             } else {
-                "API Key is missing or not configured correctly. Please add a valid API key in Settings."
+                "No API Key is currently active. Please add an API key in Settings to use the models."
             }
             throw Exception(missingKeyMsg)
         }
 
+        val isGeminiRequest = actualProviderType == ApiProvider.GOOGLE
         val modelsToTry = mutableListOf<String>()
         if (isGeminiRequest) {
-            if (targetModelId != "nabih-ultra" && targetModelId != "gemini") {
+            val candidates = listOf("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp")
+            if (targetModelId.isNotBlank() && targetModelId != "nabih-ultra" && targetModelId != "gemini") {
                 modelsToTry.add(targetModelId)
             }
-            val candidates = listOf("gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro", "gemini-pro")
             candidates.forEach { cand ->
-                if (cand != targetModelId && !modelsToTry.contains(cand)) {
+                if (!modelsToTry.contains(cand)) {
                     modelsToTry.add(cand)
                 }
             }
@@ -553,7 +497,6 @@ object AiRouter {
             }
             modelsToTry.add(mappedModelId)
             
-            // Add fallbacks
             if (actualProviderType == ApiProvider.OPENAI) {
                 val fallbacks = listOf("gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo")
                 fallbacks.forEach { if (!modelsToTry.contains(it)) modelsToTry.add(it) }
@@ -568,7 +511,7 @@ object AiRouter {
 
         for (modelId in modelsToTry) {
             if (com.example.BuildConfig.DEBUG) android.util.Log.d("NabihUltraDebug", "Model name used: $modelId")
-            val maxRetries = 3
+            val maxRetries = 2
             var currentTry = 0
             var modelSuccess = false
 
@@ -578,6 +521,10 @@ object AiRouter {
                     val chunkCollector = StringBuilder()
                     var validated = false
                     
+                    val tReq = System.currentTimeMillis()
+                    android.util.Log.d("PerfDebug", "2. Before provider.generateResponseStream. modelId=$modelId, try=$currentTry, ms since start=${tReq - tStart}")
+                    var isFirstChunk = true
+
                     provider.generateResponseStream(
                         modelId = modelId,
                         apiKey = currentApiKey,
@@ -587,11 +534,16 @@ object AiRouter {
                         attachedBase64Image = attachedBase64Image,
                         attachedDocText = attachedDocText
                     ).collect { chunk ->
+                        if (isFirstChunk) {
+                            val tFirstChunk = System.currentTimeMillis()
+                            android.util.Log.d("PerfDebug", "3. First chunk received after ${tFirstChunk - tReq}ms")
+                            isFirstChunk = false
+                        }
                         chunkCollector.append(chunk)
                         val accumulated = chunkCollector.toString()
                         
                         if (!validated) {
-                            if (accumulated.length > 25) {
+                            if (accumulated.length > 20) {
                                 val testStrLower = accumulated.trimStart().lowercase()
                                 val isBad = testStrLower.startsWith("{") || testStrLower.startsWith("[") || 
                                             testStrLower.startsWith("exception:") || testStrLower.startsWith("error:") ||
@@ -624,20 +576,14 @@ object AiRouter {
                     lastException = e
                     android.util.Log.e("AiRouter", "API Request failed on try $currentTry for model $modelId", e)
 
-                    val isAuthError = e is HttpException && (e.code() == 401 || e.code() == 403 || e.code() == 404)
+                    val isAuthError = e is HttpException && (e.code() == 401 || e.code() == 403)
                     if (isAuthError) {
                         break
                     }
 
                     currentTry++
                     if (currentTry < maxRetries) {
-                        val isRateLimit = e.message?.contains("429") == true || (e is HttpException && e.code() == 429)
-                        val backoffDelay = if (isRateLimit) {
-                            2000L * (1 shl currentTry)
-                        } else {
-                            1000L * currentTry
-                        }
-                        kotlinx.coroutines.delay(backoffDelay)
+                        kotlinx.coroutines.delay(800L * currentTry)
                     }
                 }
             }
@@ -649,11 +595,7 @@ object AiRouter {
 
         if (!success) {
             val translatedError = lastException?.let { e -> 
-                var msg = AiErrorTranslator.translate(throwable = e, isArabic = isArabic)
-                if (e is retrofit2.HttpException && e.code() == 404) {
-                    msg = "$msg (Tried: ${modelsToTry.joinToString()})"
-                }
-                msg
+                AiErrorTranslator.translate(throwable = e, isArabic = isArabic)
             } ?: (if (isArabic) "فشلت عملية الاتصال بمزود الذكاء الاصطناعي." else "Failed to connect to AI provider.")
             throw Exception(translatedError)
         }

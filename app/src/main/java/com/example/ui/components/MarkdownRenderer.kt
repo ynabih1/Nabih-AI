@@ -161,7 +161,7 @@ private fun parseMarkdownBlocks(text: String, primaryColor: Color): List<Markdow
                     val dotIndex = activeLine.indexOf(". ")
                     val number = activeLine.substring(0, dotIndex)
                     val content = activeLine.substring(dotIndex + 2).trim()
-                    blocks.add(MarkdownBlock.ListItem(renderRichText(content, primaryColor), "\$number."))
+                    blocks.add(MarkdownBlock.ListItem(renderRichText(content, primaryColor), "$number."))
                 } else {
                     if (currentParagraph.isNotEmpty()) {
                         currentParagraph.append(" ")

@@ -147,21 +147,24 @@ interface GeminiApiService {
     @POST("v1beta/models/{model}:generateContent")
     suspend fun generateContent(
         @Path("model") model: String,
-        @Header("x-goog-api-key") apiKey: String,
-        @Body request: GeminiRequest
+        @Query("key") apiKey: String,
+        @Body request: GeminiRequest,
+        @Header("x-goog-api-key") headerKey: String = apiKey
     ): GeminiResponse
 
     @POST("v1beta/models/{model}:streamGenerateContent")
     @Streaming
     suspend fun generateContentStream(
         @Path("model") model: String,
-        @Header("x-goog-api-key") apiKey: String,
-        @Body request: GeminiRequest
+        @Query("key") apiKey: String,
+        @Body request: GeminiRequest,
+        @Header("x-goog-api-key") headerKey: String = apiKey
     ): ResponseBody
 
     @GET("v1beta/models")
     suspend fun listModels(
-        @Header("x-goog-api-key") apiKey: String
+        @Query("key") apiKey: String,
+        @Header("x-goog-api-key") headerKey: String = apiKey
     ): GeminiListModelsResponse
 }
 

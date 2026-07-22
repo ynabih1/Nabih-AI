@@ -243,6 +243,7 @@ fun AiConfigurationSection(
                 },
                 isArabic = isArabic,
                 isDefault = false,
+                isOptional = true,
                 snackbarHostState = snackbarHostState,
                 onKeyChange = { googleKey = it },
                 onDeleteKey = {
@@ -337,6 +338,7 @@ fun ApiKeyCard(
     onSaveKey: (String) -> Unit,
     isArabic: Boolean,
     isDefault: Boolean = false,
+    isOptional: Boolean = false,
     snackbarHostState: SnackbarHostState,
     onKeyChange: (String) -> Unit,
     onDeleteKey: () -> Unit
@@ -434,7 +436,7 @@ fun ApiKeyCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = name,
+                        text = if (isOptional) "$name ${if (isArabic) "(اختياري)" else "(Optional)"}" else name,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -551,10 +553,11 @@ fun ApiKeyCard(
 
                 Button(
                     onClick = {
-                        if (tempKey.isBlank()) return@Button
+                        val cleanKey = tempKey.trim()
+                        if (cleanKey.isBlank()) return@Button
                         coroutineScope.launch {
                             isVerifying = true
-                            val success = testApiKeyConnection(id, tempKey)
+                            val success = testApiKeyConnection(id, cleanKey)
                             isVerifying = false
                             isVerified = success
                             if (success) {
@@ -570,7 +573,7 @@ fun ApiKeyCard(
                             }
                         }
                     },
-                    enabled = tempKey.isNotBlank() && !isVerifying,
+                    enabled = tempKey.trim().isNotBlank() && !isVerifying,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = verifyButtonBgColor,
                         contentColor = verifyButtonTextColor,
@@ -592,8 +595,9 @@ fun ApiKeyCard(
                     }
                 }
                 
+                val isSaveEnabled = tempKey.trim().isNotBlank() && !isVerifying
                 val saveButtonBgColor by animateColorAsState(
-                    targetValue = if (tempKey.isNotBlank() && isVerified && !isVerifying) {
+                    targetValue = if (isSaveEnabled) {
                         MaterialTheme.colorScheme.primary
                     } else {
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
@@ -601,7 +605,7 @@ fun ApiKeyCard(
                     animationSpec = tween(durationMillis = 300)
                 )
                 val saveButtonTextColor by animateColorAsState(
-                    targetValue = if (tempKey.isNotBlank() && isVerified && !isVerifying) {
+                    targetValue = if (isSaveEnabled) {
                         MaterialTheme.colorScheme.onPrimary
                     } else {
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
@@ -610,15 +614,18 @@ fun ApiKeyCard(
                 )
                 Button(
                     onClick = {
+                        val cleanKey = tempKey.trim()
+                        if (cleanKey.isBlank()) return@Button
                         coroutineScope.launch {
-                            onSaveKey(tempKey)
+                            onSaveKey(cleanKey)
+                            isVerified = true
                             snackbarHostState.showSnackbar(
-                                message = if (isArabic) "تم حفظ المفتاح" else "Key saved securely",
+                                message = if (isArabic) "تم حفظ المفتاح بنجاح" else "Key saved securely",
                                 duration = SnackbarDuration.Short
                             )
                         }
                     },
-                    enabled = tempKey.isNotBlank() && isVerified && !isVerifying,
+                    enabled = isSaveEnabled,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = saveButtonBgColor,
                         contentColor = saveButtonTextColor,
@@ -651,7 +658,8 @@ fun ApiKeyCard(
 }
 
 suspend fun testApiKeyConnection(provider: String, key: String): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-    if (key.isBlank()) return@withContext false
+    val cleanKey = key.trim()
+    if (cleanKey.isBlank()) return@withContext false
     try {
         val client = okhttp3.OkHttpClient.Builder()
             .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
@@ -660,37 +668,37 @@ suspend fun testApiKeyConnection(provider: String, key: String): Boolean = kotli
             
         val request = when (provider) {
             "google" -> okhttp3.Request.Builder()
-                .url("https://generativelanguage.googleapis.com/v1beta/models?key=$key")
+                .url("https://generativelanguage.googleapis.com/v1beta/models?key=$cleanKey")
                 .get()
                 .build()
             "openai" -> okhttp3.Request.Builder()
                 .url("https://api.openai.com/v1/models")
-                .header("Authorization", "Bearer $key")
+                .header("Authorization", "Bearer $cleanKey")
                 .get()
                 .build()
             "claude" -> okhttp3.Request.Builder()
                 .url("https://api.anthropic.com/v1/messages")
-                .header("x-api-key", key)
+                .header("x-api-key", cleanKey)
                 .header("anthropic-version", "2023-06-01")
                 .post(okhttp3.RequestBody.create(null, ByteArray(0)))
                 .build()
             "nabih" -> {
-                if (key.startsWith("sk-ant-")) {
+                if (cleanKey.startsWith("sk-ant-")) {
                     okhttp3.Request.Builder()
                         .url("https://api.anthropic.com/v1/messages")
-                        .header("x-api-key", key)
+                        .header("x-api-key", cleanKey)
                         .header("anthropic-version", "2023-06-01")
                         .post(okhttp3.RequestBody.create(null, ByteArray(0)))
                         .build()
-                } else if (key.startsWith("sk-")) {
+                } else if (cleanKey.startsWith("sk-")) {
                     okhttp3.Request.Builder()
                         .url("https://api.openai.com/v1/models")
-                        .header("Authorization", "Bearer $key")
+                        .header("Authorization", "Bearer $cleanKey")
                         .get()
                         .build()
                 } else {
                     okhttp3.Request.Builder()
-                        .url("https://generativelanguage.googleapis.com/v1beta/models?key=$key")
+                        .url("https://generativelanguage.googleapis.com/v1beta/models?key=$cleanKey")
                         .get()
                         .build()
                 }
@@ -700,7 +708,7 @@ suspend fun testApiKeyConnection(provider: String, key: String): Boolean = kotli
         
         val response = client.newCall(request).execute()
         
-        if (provider == "claude" || (provider == "nabih" && key.startsWith("sk-ant-"))) {
+        if (provider == "claude" || (provider == "nabih" && cleanKey.startsWith("sk-ant-"))) {
             response.code != 401 && response.code != 403
         } else {
             response.isSuccessful

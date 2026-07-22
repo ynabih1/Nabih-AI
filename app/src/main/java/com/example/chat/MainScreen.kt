@@ -75,7 +75,7 @@ import java.util.*
 
 fun generateAutoTitle(text: String): String {
     val firstLine = text.lineSequence().firstOrNull()?.trim() ?: "New Chat"
-    val cleanText = firstLine.replace(Regex("\\[REASONING MODE:.*?\\]"), "").trim()
+    val cleanText = firstLine.replace(Regex("\\[REASONING MODE:.*?\\]", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "").trim()
     if (cleanText.isEmpty()) return "New Chat"
     return if (cleanText.length > 25) {
         val truncated = cleanText.take(25)

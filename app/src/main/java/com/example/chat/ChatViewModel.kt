@@ -5,6 +5,7 @@ import com.example.data.repository.ChatRepository
 import com.example.data.local.Message
 import com.example.data.local.AttachmentItem
 import com.example.model.AiModel
+import com.example.model.ReasoningMode
 import com.example.utils.NetworkMonitor
 import androidx.lifecycle.SavedStateHandle
 
@@ -14,17 +15,6 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-
-enum class ReasoningMode(val displayName: String, val icon: String) {
-    AUTO("Auto Strategy", "🪄"),
-    FAST("Fast Direct", "⚡"),
-    BALANCED("Balanced", "⚖️"),
-    DEEP_THINKING("Deep Thinking", "🧠"),
-    RESEARCH("Deep Research", "🔍"),
-    CREATIVE("Creative Muse", "🎨"),
-    CODING("Coding Expert", "💻"),
-    TRANSLATION("Translator", "🌐")
-}
 
 sealed interface ChatUiState {
     object Idle : ChatUiState
@@ -331,33 +321,9 @@ class ChatViewModel(
             val docUri = _attachedDocUri.value
             val search = _searchEnabled.value
 
-            // Build active prompt with Reasoning mode instruction injected safely to the model
-            var activePrompt = text
+            // Pass pure user text as prompt and pass reasoningMode to chatRepository
+            val activePrompt = text
             val currentReasoning = _reasoningMode.value
-            when (currentReasoning) {
-                ReasoningMode.DEEP_THINKING -> {
-                    activePrompt += "\n[REASONING MODE: DEEP_THINKING. You MUST start your response with a thorough step-by-step thinking process wrapped in a <thinking>...</thinking> tag block first, and then provide your final answer.]"
-                }
-                ReasoningMode.FAST -> {
-                    activePrompt += "\n[REASONING MODE: FAST. Provide an extremely direct and rapid response, skipping unnecessary greetings.]"
-                }
-                ReasoningMode.RESEARCH -> {
-                    activePrompt += "\n[REASONING MODE: RESEARCH. Adopt the persona of Research Nabih. Perform exhaustive academic analysis, structure your points logically, cite potential sources, and organize data in comprehensive comparative frameworks.]"
-                }
-                ReasoningMode.CREATIVE -> {
-                    activePrompt += "\n[REASONING MODE: CREATIVE. Adopt the persona of Copy Nabih. Write with rich metaphors, engaging narrative hooks, professional formatting, and persuasive, beautifully stylistic prose.]"
-                }
-                ReasoningMode.CODING -> {
-                    activePrompt += "\n[REASONING MODE: CODING. Adopt the persona of Code Nabih. Write precise, clean, highly optimized, and thoroughly commented code following elite architectural standards and bulletproof error handling.]"
-                }
-                ReasoningMode.TRANSLATION -> {
-                    activePrompt += "\n[REASONING MODE: TRANSLATION. Adopt the persona of Translate Nabih. Provide perfect natural translation, explaining syntactic subtleties, idioms, and grammatical structures comprehensively.]"
-                }
-                ReasoningMode.AUTO -> {
-                    activePrompt += "\n[REASONING MODE: AUTO. Analyze the user's request, select the optimal reasoning strategy (Fast, Deep Thinking, Creative, or Coding) under the hood, and tailor your formatting precisely to match.]"
-                }
-                else -> {}
-            }
 
             // 2. Start Generating Streaming Response
             _isGenerating.value = true
@@ -369,7 +335,8 @@ class ChatViewModel(
                     prompt = activePrompt,
                     attachedImageUri = imgUri,
                     attachedDocUri = docUri,
-                    searchEnabled = search
+                    searchEnabled = search,
+                    reasoningMode = currentReasoning
                 ).onCompletion { err ->
                     _isGenerating.value = false
                     if (err == null) {
@@ -508,32 +475,8 @@ class ChatViewModel(
             _isGenerating.value = true
             _currentStreamingResponse.value = ""
 
-            var activePrompt = newContent
+            val activePrompt = newContent
             val currentReasoning = _reasoningMode.value
-            when (currentReasoning) {
-                ReasoningMode.DEEP_THINKING -> {
-                    activePrompt += "\n[REASONING MODE: DEEP_THINKING. You MUST start your response with a thorough step-by-step thinking process wrapped in a <thinking>...</thinking> tag block first, and then provide your final answer.]"
-                }
-                ReasoningMode.FAST -> {
-                    activePrompt += "\n[REASONING MODE: FAST. Provide an extremely direct and rapid response, skipping unnecessary greetings.]"
-                }
-                ReasoningMode.RESEARCH -> {
-                    activePrompt += "\n[REASONING MODE: RESEARCH. Adopt the persona of Research Nabih. Perform exhaustive academic analysis, structure your points logically, cite potential sources, and organize data in comprehensive comparative frameworks.]"
-                }
-                ReasoningMode.CREATIVE -> {
-                    activePrompt += "\n[REASONING MODE: CREATIVE. Adopt the persona of Copy Nabih. Write with rich metaphors, engaging narrative hooks, professional formatting, and persuasive, beautifully stylistic prose.]"
-                }
-                ReasoningMode.CODING -> {
-                    activePrompt += "\n[REASONING MODE: CODING. Adopt the persona of Code Nabih. Write precise, clean, highly optimized, and thoroughly commented code following elite architectural standards and bulletproof error handling.]"
-                }
-                ReasoningMode.TRANSLATION -> {
-                    activePrompt += "\n[REASONING MODE: TRANSLATION. Adopt the persona of Translate Nabih. Provide perfect natural translation, explaining syntactic subtleties, idioms, and grammatical structures comprehensively.]"
-                }
-                ReasoningMode.AUTO -> {
-                    activePrompt += "\n[REASONING MODE: AUTO. Analyze the user's request, select the optimal reasoning strategy (Fast, Deep Thinking, Creative, or Coding) under the hood, and tailor your formatting precisely to match.]"
-                }
-                else -> {}
-            }
 
             streamingJob = viewModelScope.launch {
                 chatRepository.streamChatResponse(
@@ -541,7 +484,8 @@ class ChatViewModel(
                     prompt = activePrompt,
                     attachedImageUri = updatedMsg.imageUri?.let { Uri.parse(it) },
                     attachedDocUri = updatedMsg.documentUri?.let { Uri.parse(it) },
-                    searchEnabled = _searchEnabled.value
+                    searchEnabled = _searchEnabled.value,
+                    reasoningMode = currentReasoning
                 ).onCompletion { err ->
                     _isGenerating.value = false
                     if (err == null) {
