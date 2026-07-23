@@ -20,13 +20,13 @@ import kotlinx.coroutines.tasks.await
 suspend fun getCurrentGeminiModelName(): String {
     return try {
         val remoteConfig = Firebase.remoteConfig
-        remoteConfig.setDefaultsAsync(mapOf("gemini_model_name" to "gemini-2.5-flash"))
+        remoteConfig.setDefaultsAsync(mapOf("gemini_model_name" to "gemini-3.6-flash"))
         remoteConfig.fetchAndActivate().await()
         val fetched = remoteConfig.getString("gemini_model_name")
-        if (fetched.isNotBlank()) fetched else "gemini-2.5-flash"
+        if (fetched.isNotBlank()) fetched else "gemini-3.6-flash"
     } catch (e: Exception) {
-        android.util.Log.e("RemoteConfig", "Fetch failed, using default gemini-2.5-flash", e)
-        "gemini-2.5-flash"
+        android.util.Log.e("RemoteConfig", "Fetch failed, using default gemini-3.6-flash", e)
+        "gemini-3.6-flash"
     }
 }
 
@@ -468,7 +468,7 @@ object AiRouter {
                     targetModelId = "gpt-4o"
                 } else {
                     actualProviderType = ApiProvider.GOOGLE
-                    targetModelId = "gemini-2.5-flash"
+                    targetModelId = "gemini-3.6-flash"
                 }
             } else {
                 val anthropicKey = settings.anthropicApiKey.trim()
@@ -495,12 +495,12 @@ object AiRouter {
                     isValidKey(googleKey) -> {
                         actualProviderType = ApiProvider.GOOGLE
                         currentApiKey = googleKey
-                        targetModelId = "gemini-2.5-flash"
+                        targetModelId = "gemini-3.6-flash"
                     }
                     isValidKey(buildConfigKey) -> {
                         actualProviderType = ApiProvider.GOOGLE
                         currentApiKey = buildConfigKey
-                        targetModelId = "gemini-2.5-flash"
+                        targetModelId = "gemini-3.6-flash"
                     }
                 }
             }
@@ -548,7 +548,7 @@ object AiRouter {
         val modelsToTry = mutableListOf<String>()
         if (isGeminiRequest) {
             val defaultRemoteModel = getCurrentGeminiModelName()
-            val candidates = listOf(defaultRemoteModel, "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash")
+            val candidates = listOf(defaultRemoteModel, "gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash")
             val cleanTargetId = if (targetModelId.isNotBlank() && targetModelId != "nabih-ultra" && targetModelId != "gemini") {
                 if (targetModelId.startsWith("gemini-1.") || targetModelId == "gemini-pro" || targetModelId == "gemini") {
                     defaultRemoteModel
@@ -657,6 +657,11 @@ object AiRouter {
 
                     android.util.Log.e("AiRouter", "API Request failed on try $currentTry for model '$modelId'. Error: ${e.message}, Google Error Body: $responseBodyText", e)
 
+                    if (isGeminiRequest) {
+                        val nextModel = modelsToTry.getOrNull(modelsToTry.indexOf(modelId) + 1) ?: "gemini-2.5-flash"
+                        android.util.Log.w("GeminiModel", "Primary model '$modelId' failed (${e.message}), falling back to '$nextModel'")
+                    }
+
                     val isRateLimit = (e is HttpException && e.code() == 429) || (e.message?.contains("429") == true)
                     val isAuthError = e is HttpException && (e.code() == 401 || e.code() == 403)
 
@@ -679,9 +684,8 @@ object AiRouter {
             if (modelSuccess) {
                 break
             }
-            val lastIsRateLimit = lastException?.let { (it is HttpException && it.code() == 429) || (it.message?.contains("429") == true) } ?: false
             val lastIsAuth = lastException?.let { it is HttpException && (it.code() == 401 || it.code() == 403) } ?: false
-            if (lastIsRateLimit || lastIsAuth) {
+            if (lastIsAuth) {
                 break
             }
         }

@@ -1092,10 +1092,14 @@ fun MessageItem(
             message.content.startsWith("API_ERROR:") || 
             message.content.startsWith("Error:"))
             
-    val cleanContent = remember(message.content) {
+    val cleanContent = remember(message.content, isArabic) {
         var text = message.content
         if (text.startsWith("API_ERROR:")) {
             text = text.substring("API_ERROR:".length).trim()
+        }
+        if (text.contains("Rate limit exceeded") || text.contains("تم تجاوز الحد المسموح") || text.contains("Quota Exceeded") || text.contains("Too many requests")) {
+            text = if (isArabic) "الخدمة مشغولة حالياً بسبب كثرة الطلبات، يرجى المحاولة بعد قليل أو اختيار نموذج آخر."
+                   else "The service is temporarily busy due to high demand. Please try again in a moment or select another model."
         }
         text
     }

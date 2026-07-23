@@ -24,7 +24,7 @@ object AiErrorTranslator {
             400 -> "حدث خطأ في تنسيق الطلب، حاول مرة أخرى"
             401, 403 -> "مفتاح API غير صالح أو منتهي الصلاحية، تحقق من إعدادات المفاتيح"
             404 -> "الخدمة غير متاحة مؤقتاً، جرّب موديلاً آخر من القائمة أو حاول لاحقاً"
-            429 -> "تم تجاوز الحد المسموح لهذا المزود. قد يكون السبب:\n١) انتهاء الرصيد المخصص للحساب\n٢) إرسال عدد كبير من الطلبات خلال وقت قصير\nحاول لاحقاً، أو استخدم موديلاً آخر من القائمة."
+            429 -> "الخدمة مشغولة حالياً بسبب كثرة الطلبات، يرجى المحاولة بعد قليل أو اختيار نموذج آخر."
             500, 502, 503, 504 -> "خدمة [$providerNameAr] غير متاحة مؤقتاً، حاول مرة أخرى بعد قليل"
             -1 -> "استغرق الرد وقتاً أطول من المتوقع، تحقق من اتصالك وحاول مرة أخرى"
             else -> "حدث خطأ غير متوقع ($code) أثناء الاتصال بـ $providerNameAr، يرجى المحاولة لاحقاً."
@@ -47,7 +47,7 @@ object AiErrorTranslator {
                         400 -> "Bad request (400). Please check your input parameters or model configuration."
                         401, 403 -> "Unauthorized or invalid API Key (401/403). Please verify your key in Settings."
                         404 -> "Model not found or currently unavailable (404). Please select a different model from the list."
-                        429 -> "Rate limit exceeded for this provider. This may be caused by:\n1) Expired or depleted account quota/credits\n2) Too many requests in a short time\nPlease try again later, or select another model from the list."
+                        429 -> "The service is temporarily busy due to high demand. Please try again in a moment or select another model."
                         500, 502, 503, 504 -> "Service internal error (${throwable.code()}). Please try again later."
                         else -> "Unexpected provider error (${throwable.code()})."
                     }
@@ -55,7 +55,7 @@ object AiErrorTranslator {
                 else -> {
                     val msg = throwable.localizedMessage ?: throwable.message ?: ""
                     if (msg.contains("429")) {
-                        "Rate limit exceeded for this provider. This may be caused by:\n1) Expired or depleted account quota/credits\n2) Too many requests in a short time\nPlease try again later, or select another model from the list."
+                        "The service is temporarily busy due to high demand. Please try again in a moment or select another model."
                     } else if (msg.contains("VALIDATION_FAILED")) {
                         "Sorry, I couldn't understand your request. Please try rephrasing your question."
                     } else {
