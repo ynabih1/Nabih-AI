@@ -1,1 +1,0 @@
-sed -i 's/        for (modelId in modelsToTry) {/        for (modelId in modelsToTry) {\n            if (com.example.BuildConfig.DEBUG) android.util.Log.d("NabihUltraDebug", "Model name used: $modelId")/g' app/src/main/java/com/example/data/remote/AiProvider.kt

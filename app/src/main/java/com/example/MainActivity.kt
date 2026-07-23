@@ -3,22 +3,22 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.unit.dp
 
 import com.example.di.ViewModelFactory
-import com.example.model.AppLanguage
-import com.example.model.AppTheme
+import com.example.models.AppLanguage
+import com.example.models.AppTheme
 import com.example.ui.theme.NabihTheme
 import com.example.auth.AccountScreen
 
 import com.example.auth.LoginScreen
-import com.example.chat.ChatViewModel
-import com.example.chat.HomeViewModel
-import com.example.chat.MainScreen
-import com.example.settings.SettingsScreen
-import com.example.settings.ApiKeysScreen
-import com.example.settings.SettingsViewModel
-import com.example.settings.FilesScreen
-import com.example.settings.HelpScreen
-import com.example.settings.PrivacyScreen
-import com.example.settings.SavedChatsScreen
+import com.example.chat.logic.ChatViewModel
+import com.example.chat.logic.HomeViewModel
+import com.example.chat.ui.MainScreen
+import com.example.settings.general.SettingsScreen
+import com.example.settings.apikeys.ApiKeysScreen
+import com.example.settings.profile.SettingsViewModel
+import com.example.settings.general.FilesScreen
+import com.example.settings.general.HelpScreen
+import com.example.settings.general.PrivacyScreen
+import com.example.settings.general.SavedChatsScreen
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -50,7 +50,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.google.firebase.FirebaseApp
-import com.example.chat.DiagnosticScreen
+import com.example.chat.ui.DiagnosticScreen
 import com.example.BuildConfig
 
 class MainActivity : ComponentActivity() {
@@ -109,9 +109,9 @@ class MainActivity : ComponentActivity() {
             // Dynamically provide Language Alignment (RTL / LTR) across all layouts
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                 val darkTheme = when (settings.theme) {
-                    com.example.model.AppTheme.DARK -> true
-                    com.example.model.AppTheme.LIGHT -> false
-                    com.example.model.AppTheme.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+                    com.example.models.AppTheme.DARK -> true
+                    com.example.models.AppTheme.LIGHT -> false
+                    com.example.models.AppTheme.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
                 }
                 NabihTheme(darkTheme = darkTheme, isArabic = settings.language == AppLanguage.ARABIC) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -188,7 +188,7 @@ class MainActivity : ComponentActivity() {
                                     onLogout = {
                                         settingsViewModel.logout()
                                         navController.navigate("login") {
-                                            popUpTo("home") { inclusive = true }
+                                            popUpTo(0) { inclusive = true }
                                         }
                                     },
                                     onDeleteAccount = {
@@ -198,7 +198,7 @@ class MainActivity : ComponentActivity() {
                                             settingsViewModel.logout()
                                             settingsViewModel.saveApiKeys("", "", "", "")
                                             navController.navigate("login") {
-                                                popUpTo("home") { inclusive = true }
+                                                popUpTo(0) { inclusive = true }
                                             }
                                         }
                                     }

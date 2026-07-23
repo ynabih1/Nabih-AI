@@ -32,7 +32,8 @@ data class Message(
     val imageUri: String? = null,
     val documentUri: String? = null,
     val documentName: String? = null,
-    val isVoice: Boolean = false
+    val isVoice: Boolean = false,
+    val audioUri: String? = null
 )
 
 @Entity(tableName = "memory_items")

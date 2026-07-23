@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.rounded.Person
@@ -32,7 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import com.example.settings.SettingsViewModel
+import com.example.settings.profile.SettingsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -72,9 +73,11 @@ fun AccountScreen(
     
     var isSaving by remember { mutableStateOf(false) }
     var isDeleting by remember { mutableStateOf(false) }
+    var isLoggingOut by remember { mutableStateOf(false) }
     var isUploadingImage by remember { mutableStateOf(false) }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
     var deleteConfirmationText by remember { mutableStateOf("") }
     var deleteErrorText by remember { mutableStateOf<String?>(null) }
     var showPhotoOptions by remember { mutableStateOf(false) }
@@ -152,6 +155,77 @@ fun AccountScreen(
                 )
             }
         }
+    }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isLoggingOut) {
+                    showLogoutDialog = false
+                }
+            },
+            title = {
+                Text(
+                    text = if (isArabic) "تسجيل الخروج" else "Sign Out",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = if (isArabic) "هل أنت تأكد من أنك تريد تسجيل الخروج؟" else "Are you sure you want to sign out?",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            isLoggingOut = true
+                            val startTime = System.currentTimeMillis()
+                            android.util.Log.d("AuthPerformance", "signOut STARTED")
+                            try {
+                                com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+                                try {
+                                    val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+                                        com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
+                                    ).build()
+                                    com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso).signOut().await()
+                                } catch (e: Exception) {
+                                    android.util.Log.e("AccountScreen", "Google SignOut error", e)
+                                }
+                                android.util.Log.d("AuthPerformance", "signOut COMPLETED in ${System.currentTimeMillis() - startTime}ms")
+                                showLogoutDialog = false
+                                onLogout()
+                            } catch (e: Exception) {
+                                android.util.Log.e("AccountScreen", "Error logging out", e)
+                                Toast.makeText(context, if (isArabic) "تعذر تسجيل الخروج" else "Failed to sign out", Toast.LENGTH_SHORT).show()
+                            } finally {
+                                isLoggingOut = false
+                            }
+                        }
+                    },
+                    enabled = !isLoggingOut,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    if (isLoggingOut) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onError, strokeWidth = 2.dp)
+                    } else {
+                        Text(if (isArabic) "تسجيل الخروج" else "Sign Out")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showLogoutDialog = false },
+                    enabled = !isLoggingOut
+                ) {
+                    Text(if (isArabic) "إلغاء" else "Cancel")
+                }
+            }
+        )
     }
 
     if (showDeleteDialog) {
@@ -550,8 +624,24 @@ fun AccountScreen(
                 }
             }
 
-            // 4. Delete Account Section with vertical spacer (32dp)
+            // 4. Sign Out & Delete Account Section
             Spacer(modifier = Modifier.height(32.dp))
+
+            Button(
+                onClick = { showLogoutDialog = true },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                ),
+                modifier = Modifier.fillMaxWidth().height(56.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Rounded.Logout, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(if (isArabic) "تسجيل الخروج" else "Sign Out", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedButton(
                 onClick = { showDeleteDialog = true },

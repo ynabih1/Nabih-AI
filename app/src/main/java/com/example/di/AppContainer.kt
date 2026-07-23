@@ -11,7 +11,7 @@ interface AppContainer {
     val settingsRepository: SettingsRepository
     val memoryRepository: MemoryRepository
     val chatRepository: ChatRepository
-    val notificationHelper: com.example.util.NotificationHelper
+    val notificationHelper: com.example.utils.NotificationHelper
     val networkMonitor: NetworkMonitor
 }
 
@@ -32,8 +32,8 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         MemoryRepository(database.memoryDao())
     }
 
-    override val notificationHelper: com.example.util.NotificationHelper by lazy {
-        com.example.util.NotificationHelper(context)
+    override val notificationHelper: com.example.utils.NotificationHelper by lazy {
+        com.example.utils.NotificationHelper(context)
     }
 
     override val chatRepository: ChatRepository by lazy {

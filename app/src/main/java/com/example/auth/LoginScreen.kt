@@ -2,8 +2,8 @@ package com.example.auth
 
 import com.example.R
 import androidx.compose.foundation.border
-import com.example.model.AppLanguage
-import com.example.settings.SettingsViewModel
+import com.example.models.AppLanguage
+import com.example.settings.profile.SettingsViewModel
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -142,9 +142,12 @@ fun LoginScreen(
             if (idToken != null) {
                 scope.launch {
                     isLoading = true
+                    val startTime = System.currentTimeMillis()
+                    android.util.Log.d("AuthPerformance", "Google Auth signInWithCredential STARTED")
                     try {
                         val credential = GoogleAuthProvider.getCredential(idToken, null)
                         val authResult = firebaseAuth.signInWithCredential(credential).await()
+                        android.util.Log.d("AuthPerformance", "Google Auth COMPLETED in ${System.currentTimeMillis() - startTime}ms")
                         val firebaseUser = authResult.user
                         val email = firebaseUser?.email ?: ""
                         val displayName = firebaseUser?.displayName ?: "Google User"
@@ -170,16 +173,24 @@ fun LoginScreen(
                 Toast.makeText(context, if (isArabic) "فشل الحصول على رمز تعريف Google" else "Failed to get Google ID Token", Toast.LENGTH_SHORT).show()
             }
         } catch (e: ApiException) {
-            if (e.statusCode != com.google.android.gms.common.api.CommonStatusCodes.CANCELED &&
-                e.statusCode != 12501
-            ) {
-                android.util.Log.e("LoginScreen", "Google Sign In Error", e)
-                val msg = if (e.statusCode == 10) { // 10 = DEVELOPER_ERROR
-                    if (isArabic) "حدثت مشكلة في إعدادات تسجيل الدخول (SHA-1 / Client ID)، يرجى التواصل مع المطور. (رمز: 10)" 
-                     else "Login configuration issue (SHA-1 / Client ID), please contact the developer. (Code: 10)"
-                } else {
-                    if (isArabic) "فشل تسجيل الدخول عبر Google (${e.statusCode})" else "Google Sign-In failed (${e.statusCode})"
+            android.util.Log.e("LoginScreen", "Google Sign In Error status: ${e.statusCode}", e)
+            val msg = when (e.statusCode) {
+                com.google.android.gms.common.api.CommonStatusCodes.NETWORK_ERROR, 7 -> {
+                    if (isArabic) "تعذر الاتصال بجوجل، تحقق من اتصالك بالإنترنت وحاول مرة أخرى"
+                    else "Unable to connect to Google. Check your internet connection and try again."
                 }
+                com.google.android.gms.common.api.CommonStatusCodes.DEVELOPER_ERROR, 10 -> {
+                    android.util.Log.e("GoogleSignIn", "Developer error - check SHA-1/Client ID configuration")
+                    if (isArabic) "حدثت مشكلة في الإعداد، يرجى المحاولة لاحقاً"
+                    else "Login configuration issue, please try again later"
+                }
+                com.google.android.gms.common.api.CommonStatusCodes.CANCELED, 12501 -> null
+                else -> {
+                    if (isArabic) "تعذر تسجيل الدخول عبر جوجل، حاول مرة أخرى (${e.statusCode})"
+                    else "Google Sign-In failed (${e.statusCode})"
+                }
+            }
+            if (msg != null) {
                 Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
             }
         }
@@ -196,24 +207,29 @@ fun LoginScreen(
 
     val verifyEmailAndNavigate = { email: String ->
         val trimmedEmail = email.trim()
-        scope.launch {
-            isLoading = true
-            emailSignInError = null
-            try {
-                val result = firebaseAuth.fetchSignInMethodsForEmail(trimmedEmail).await()
-                val methods = result.signInMethods
-                if (methods.isNullOrEmpty()) {
-                    android.util.Log.d("EmailCheck", "RESULT: email NOT registered -> going to CREATE ACCOUNT screen")
-                    currentStep = 2
-                } else {
-                    android.util.Log.d("EmailCheck", "RESULT: email ALREADY registered -> going to SIGN IN screen")
-                    currentStep = 3
+        if (!isLoading) {
+            scope.launch {
+                isLoading = true
+                emailSignInError = null
+                val startTime = System.currentTimeMillis()
+                android.util.Log.d("AuthPerformance", "fetchSignInMethodsForEmail STARTED for $trimmedEmail")
+                try {
+                    val result = firebaseAuth.fetchSignInMethodsForEmail(trimmedEmail).await()
+                    android.util.Log.d("AuthPerformance", "fetchSignInMethodsForEmail COMPLETED in ${System.currentTimeMillis() - startTime}ms")
+                    val methods = result.signInMethods
+                    if (methods.isNullOrEmpty()) {
+                        android.util.Log.d("EmailCheck", "RESULT: email NOT registered -> going to CREATE ACCOUNT screen")
+                        currentStep = 2
+                    } else {
+                        android.util.Log.d("EmailCheck", "RESULT: email ALREADY registered -> going to SIGN IN screen")
+                        currentStep = 3
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("EmailCheck", "Unexpected: ${e.javaClass.simpleName} - ${e.message}")
+                    emailSignInError = if (isArabic) "تعذر التحقق من البريد الإلكتروني، حاول مرة أخرى" else "Failed to verify email, try again"
+                } finally {
+                    isLoading = false
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("EmailCheck", "Unexpected: ${e.javaClass.simpleName} - ${e.message}")
-                emailSignInError = if (isArabic) "تعذر التحقق من البريد الإلكتروني، حاول مرة أخرى" else "Failed to verify email, try again"
-            } finally {
-                isLoading = false
             }
         }
     }

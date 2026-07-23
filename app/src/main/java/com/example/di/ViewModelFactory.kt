@@ -3,9 +3,9 @@ package com.example.di
 import com.example.data.repository.MemoryRepository
 import com.example.data.repository.SettingsRepository
 import com.example.data.repository.ChatRepository
-import com.example.chat.ChatViewModel
-import com.example.chat.HomeViewModel
-import com.example.settings.SettingsViewModel
+import com.example.chat.logic.ChatViewModel
+import com.example.chat.logic.HomeViewModel
+import com.example.settings.profile.SettingsViewModel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider

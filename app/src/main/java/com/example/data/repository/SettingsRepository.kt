@@ -1,11 +1,11 @@
 package com.example.data.repository
 
-import com.example.model.AiModel
-import com.example.model.AppLanguage
-import com.example.model.AppSettings
-import com.example.model.AppTheme
-import com.example.model.FontSize
-import com.example.model.ResponseStyle
+import com.example.models.AiModel
+import com.example.models.AppLanguage
+import com.example.models.AppSettings
+import com.example.models.AppTheme
+import com.example.models.FontSize
+import com.example.models.ResponseStyle
 
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
