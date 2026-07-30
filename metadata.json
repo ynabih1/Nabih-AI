@@ -1,6 +1,6 @@
 {
   "name": "Nabih AI",
-  "description": "Smart conversational AI assistant supporting text, voice, and image capabilities in English and Arabic.",
+  "description": "Smart multi-model AI conversational assistant supporting Arabic and English.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
