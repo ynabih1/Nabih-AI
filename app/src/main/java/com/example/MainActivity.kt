@@ -13,7 +13,6 @@ import com.example.chat.logic.ChatViewModel
 import com.example.chat.logic.HomeViewModel
 import com.example.chat.ui.MainScreen
 import com.example.settings.general.SettingsScreen
-import com.example.settings.apikeys.ApiKeysScreen
 import com.example.settings.profile.SettingsViewModel
 import com.example.settings.general.FilesScreen
 import com.example.settings.general.HelpScreen
@@ -129,6 +128,7 @@ class MainActivity : ComponentActivity() {
                                 LoginScreen(
                                     settingsViewModel = settingsViewModel,
                                     onLoginSuccess = {
+                                        chatViewModel.resetChatState()
                                         navController.navigate("home") {
                                             popUpTo("login") { inclusive = true }
                                         }
@@ -162,14 +162,6 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            composable("api_keys") {
-                                ApiKeysScreen(
-                                    settingsViewModel = settingsViewModel,
-                                    onNavigateBack = {
-                                        navController.popBackStack()
-                                    }
-                                )
-                            }
                             composable("saved") {
                                 SavedChatsScreen(onNavigateBack = { navController.popBackStack() }, isArabic = settings.language == AppLanguage.ARABIC)
                             }
@@ -186,7 +178,7 @@ class MainActivity : ComponentActivity() {
                                     onNavigateBack = { navController.popBackStack() },
                                     isArabic = settings.language == AppLanguage.ARABIC,
                                     onLogout = {
-                                        settingsViewModel.logout()
+                                        chatViewModel.resetChatState()
                                         navController.navigate("login") {
                                             popUpTo(0) { inclusive = true }
                                         }
@@ -197,6 +189,7 @@ class MainActivity : ComponentActivity() {
                                             appContainer.memoryRepository.deleteAllMemories()
                                             settingsViewModel.logout()
                                             settingsViewModel.saveApiKeys("", "", "", "")
+                                            chatViewModel.resetChatState()
                                             navController.navigate("login") {
                                                 popUpTo(0) { inclusive = true }
                                             }

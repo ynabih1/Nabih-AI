@@ -2,19 +2,32 @@ package com.example.ui.components
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material.icons.rounded.DataObject
+import androidx.compose.material.icons.rounded.Css
+import androidx.compose.material.icons.rounded.Html
+import androidx.compose.material.icons.rounded.Javascript
+import androidx.compose.material.icons.rounded.IntegrationInstructions
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -230,60 +243,138 @@ fun CodeBlockLayout(
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
-    
     val codeBgColor = Color(0xFF1E1E2E)
-    val headerBgColor = Color(0xFF151521)
+    val headerBgColor = Color(0xFF181825)
+    val borderColor = Color(0xFF313244)
     val textColor = Color(0xFFCDD6F4)
     val accentColor = Color(0xFF89B4FA)
+    val textMutedColor = Color(0xFFA6ADC8)
+    
+    val scrollState = rememberScrollState()
+    val highlightedCode = remember(code, language) {
+        CodeSyntaxHighlighter.highlight(code, language)
+    }
+
+    val langLower = language.lowercase().trim()
+    val langIcon: ImageVector = when (langLower) {
+        "html", "xml" -> Icons.Rounded.Html
+        "css", "scss" -> Icons.Rounded.Css
+        "js", "javascript", "ts", "typescript" -> Icons.Rounded.Javascript
+        "json" -> Icons.Rounded.DataObject
+        "sh", "bash", "shell", "cmd", "terminal" -> Icons.Rounded.Terminal
+        "kt", "kotlin", "java", "cpp", "c", "csharp", "cs", "py", "python", "rb", "ruby", "go", "rs", "rust", "swift" -> Icons.Rounded.Code
+        else -> Icons.Rounded.IntegrationInstructions
+    }
     
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(codeBgColor)
+            .border(
+                width = 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(14.dp)
+            )
     ) {
+        // Dark Terminal Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(headerBgColor)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = language.lowercase().replaceFirstChar { it.uppercase() },
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = accentColor,
-                fontFamily = FontFamily.Monospace
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = langIcon,
+                    contentDescription = null,
+                    tint = accentColor.copy(alpha = 0.85f),
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = language.lowercase().replaceFirstChar { it.uppercase() },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = accentColor,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
             IconButton(
                 onClick = {
                     clipboardManager.setText(AnnotatedString(code))
-                    Toast.makeText(context, if (context.resources.configuration.locales[0].language == "ar") "تم نسخ الكود البرمجي" else "Code copied to clipboard", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        if (context.resources.configuration.locales[0].language == "ar") "تم نسخ الكود" else "Code copied",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 },
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(28.dp)
             ) {
                 Icon(
                     imageVector = Icons.Rounded.ContentCopy,
                     contentDescription = "Copy code",
-                    tint = Color(0xFFA6ADC8),
+                    tint = textMutedColor,
                     modifier = Modifier.size(16.dp)
                 )
             }
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(16.dp)
-        ) {
-            Text(
-                text = code,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.5.sp,
-                color = textColor,
-                lineHeight = 20.sp
+        
+        // Code content area with syntax highlighting and horizontal scroll
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(scrollState)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = highlightedCode,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.5.sp,
+                    lineHeight = 21.sp,
+                    softWrap = false
+                )
+            }
+
+            // Right edge fade gradient indicating extra horizontal content
+            val canScrollForward = scrollState.value < scrollState.maxValue
+            if (canScrollForward) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .width(36.dp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(Color.Transparent, codeBgColor)
+                                )
+                            )
+                    )
+                }
+            }
+        }
+        
+        // Horizontal scrollbar indicator when code overflows
+        if (scrollState.maxValue > 0) {
+            val progress = scrollState.value.toFloat() / scrollState.maxValue.toFloat()
+            LinearProgressIndicator(
+                progress = { 0.15f + progress * 0.70f },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp),
+                color = accentColor.copy(alpha = 0.45f),
+                trackColor = Color.Transparent
             )
         }
     }

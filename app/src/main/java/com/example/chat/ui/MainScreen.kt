@@ -45,6 +45,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.geometry.Offset
+import com.example.utils.FileUtils
+import android.webkit.MimeTypeMap
+import java.io.File
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -975,6 +981,12 @@ fun AiResponseToolbar(
     val context = LocalContext.current
     var reaction by remember { mutableStateOf<Boolean?>(null) } // true = like, false = dislike
     var showFeedbackSheet by remember { mutableStateOf(false) }
+    var isSpeaking by remember { mutableStateOf(false) }
+
+    // Clean markdown symbols for speech synthesis
+    val cleanSpeechText = remember(content) {
+        content.replace(Regex("[#*_`~>\\[\\]()]"), "").trim()
+    }
 
     if (showFeedbackSheet) {
         FeedbackBottomSheet(
@@ -1067,6 +1079,211 @@ fun AiResponseToolbar(
     }
 }
 
+fun openDocumentExternally(
+    context: android.content.Context,
+    documentUriString: String?,
+    documentName: String? = null,
+    isArabic: Boolean = false
+) {
+    if (documentUriString.isNullOrBlank()) {
+        val msg = if (isArabic) "تعذر العثور على مسار الملف" else "File path not found"
+        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    try {
+        val parsedUri = Uri.parse(documentUriString)
+        val finalUri: Uri = if (parsedUri.scheme == "file" || (parsedUri.path != null && parsedUri.scheme == null)) {
+            val file = File(parsedUri.path ?: "")
+            try {
+                androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.provider",
+                    file
+                )
+            } catch (e: Exception) {
+                parsedUri
+            }
+        } else {
+            parsedUri
+        }
+
+        val extension = (documentName ?: documentUriString).substringAfterLast('.', "").lowercase(Locale.ROOT)
+        val mimeType = if (extension.isNotBlank()) {
+            MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+        } else null ?: context.contentResolver.getType(finalUri) ?: "*/*"
+
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+            setDataAndType(finalUri, mimeType)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        context.startActivity(intent)
+    } catch (e: android.content.ActivityNotFoundException) {
+        val msg = if (isArabic) "لا يوجد تطبيق لفتح هذا النوع من الملفات" else "No app found to open this file"
+        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+    } catch (e: Exception) {
+        android.util.Log.e("MainScreen", "Error opening document externally", e)
+        val msg = if (isArabic) "تعذر فتح الملف" else "Unable to open file"
+        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+    }
+}
+
+@Composable
+fun FullScreenImageViewer(
+    imageUri: String?,
+    isArabic: Boolean,
+    onDismiss: () -> Unit
+) {
+    if (imageUri == null) return
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        var scale by remember { mutableFloatStateOf(1f) }
+        var offset by remember { mutableStateOf(Offset.Zero) }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            // Interactive Image with Pinch-to-zoom and Pan
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scale = (scale * zoom).coerceIn(1f, 5f)
+                            offset = if (scale > 1f) {
+                                Offset(
+                                    x = (offset.x + pan.x).coerceIn(-1200f * (scale - 1f), 1200f * (scale - 1f)),
+                                    y = (offset.y + pan.y).coerceIn(-1200f * (scale - 1f), 1200f * (scale - 1f))
+                                )
+                            } else {
+                                Offset.Zero
+                            }
+                        }
+                    }
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                if (scale > 1f) {
+                                    scale = 1f
+                                    offset = Offset.Zero
+                                } else {
+                                    scale = 2.5f
+                                }
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                coil.compose.SubcomposeAsyncImage(
+                    model = imageUri,
+                    contentDescription = "Full screen image",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offset.x,
+                            translationY = offset.y
+                        ),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    loading = {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 3.dp,
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+                    },
+                    error = {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.BrokenImage,
+                                contentDescription = "Error loading image",
+                                tint = Color.LightGray,
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = if (isArabic) "تعذر تحميل الصورة بالحجم الكامل" else "Failed to load image",
+                                color = Color.LightGray,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                )
+            }
+
+            // Top overlay bar with close button & zoom indicator/reset
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Close image viewer",
+                        tint = Color.White
+                    )
+                }
+
+                if (scale > 1.05f) {
+                    IconButton(
+                        onClick = {
+                            scale = 1f
+                            offset = Offset.Zero
+                        },
+                        modifier = Modifier
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                            .padding(horizontal = 8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.RestartAlt,
+                                contentDescription = "Reset zoom",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "${(scale * 100).toInt()}%",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Gorgeous modernized message card item bubble supporting adaptive widths & rich imagery
 @Composable
 fun MessageItem(
@@ -1085,6 +1302,7 @@ fun MessageItem(
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
+    var showFullScreenImage by remember { mutableStateOf(false) }
     var editMessageText by remember { mutableStateOf(message.content) }
 
     val isErrorMsg = !isUser && (message.content.startsWith("An error occurred:") || 
@@ -1261,90 +1479,185 @@ fun MessageItem(
             Spacer(modifier = Modifier.width(10.dp))
         }
         
-        val bubbleShape = RoundedCornerShape(
-            topStart = 24.dp,
-            topEnd = 24.dp,
-            bottomStart = if (isUser) 24.dp else 4.dp,
-            bottomEnd = if (isUser) 4.dp else 24.dp
+        if (showFullScreenImage && message.imageUri != null) {
+        FullScreenImageViewer(
+            imageUri = message.imageUri,
+            isArabic = isArabic,
+            onDismiss = { showFullScreenImage = false }
         )
-        
-        val formattedTime = remember(message.timestamp) {
-            try {
-                val sdf = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault())
-                val formatted = sdf.format(java.util.Date(message.timestamp))
-                if (isArabic) {
-                    formatted.replace("AM", "ص").replace("PM", "م")
-                } else {
-                    formatted
-                }
-            } catch (e: Exception) {
-                ""
-            }
+    }
+
+        val bubbleShape = if (isUser) {
+            RoundedCornerShape(20.dp)
+        } else {
+            RoundedCornerShape(
+                topStart = 20.dp,
+                topEnd = 20.dp,
+                bottomStart = 4.dp,
+                bottomEnd = 20.dp
+            )
         }
         
         Column(
-            modifier = Modifier.weight(1f, fill = false)
+            modifier = Modifier
+                .fillMaxWidth(if (isUser) 0.78f else 1f)
+                .wrapContentWidth(if (isUser) Alignment.End else Alignment.Start),
+            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
         ) {
             Surface(
                 shape = bubbleShape,
                 color = if (isUser) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                    Color(0xFFEAF2FD)
                 } else if (isErrorMsg) {
                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 } else {
-                    MaterialTheme.colorScheme.surface
+                    Color.Transparent
                 },
-                border = androidx.compose.foundation.BorderStroke(
-                    width = 1.dp,
-                    color = if (isUser) {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                    } else if (isErrorMsg) {
-                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-                    } else {
-                        MaterialTheme.colorScheme.outlineVariant
-                    }
-                ),
+                border = if (isUser) {
+                    null
+                } else if (isErrorMsg) {
+                    androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                } else {
+                    null
+                },
                 tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
                 modifier = Modifier
                     .clickable(enabled = !isLoading) { showMenu = true }
             ) {
                 Box {
-                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    Column(
+                        modifier = Modifier.padding(
+                            horizontal = if (isUser) 16.dp else 4.dp,
+                            vertical = if (isUser) 10.dp else 6.dp
+                        )
+                    ) {
                         if (message.imageUri != null) {
                             Card(
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(max = 240.dp)
+                                    .heightIn(min = 120.dp, max = 340.dp)
                                     .padding(bottom = 8.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .clickable { showFullScreenImage = true }
                             ) {
-                                androidx.compose.foundation.Image(
-                                    painter = coil.compose.rememberAsyncImagePainter(message.imageUri),
+                                coil.compose.SubcomposeAsyncImage(
+                                    model = message.imageUri,
                                     contentDescription = "Attached Image",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                    loading = {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(180.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(32.dp),
+                                                strokeWidth = 2.5.dp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    },
+                                    error = {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(130.dp)
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.BrokenImage,
+                                                    contentDescription = "Failed to load image",
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                    modifier = Modifier.size(36.dp)
+                                                )
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(
+                                                    text = if (isArabic) "تعذر تحميل الصورة" else "Failed to load image",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            }
+                                        }
+                                    }
                                 )
                             }
                         }
                         if (message.documentUri != null) {
-                            Row(
+                            val docUri = remember(message.documentUri) {
+                                try { Uri.parse(message.documentUri) } catch (e: Exception) { null }
+                            }
+                            val docSize = remember(docUri) {
+                                if (docUri != null) FileUtils.getUriSizeFormatted(context, docUri) else ""
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(bottom = 8.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .clickable {
+                                        openDocumentExternally(
+                                            context = context,
+                                            documentUriString = message.documentUri,
+                                            documentName = message.documentName,
+                                            isArabic = isArabic
+                                        )
+                                    }
                             ) {
-                                Icon(Icons.Rounded.Description, contentDescription = "Document", tint = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = message.documentName ?: "Attached Document",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = message.documentName ?: (if (isArabic) "مستند مرفق" else "Attached Document"),
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        val ext = message.documentName?.substringAfterLast('.', "")?.uppercase()?.ifEmpty { "DOC" } ?: "DOC"
+                                        Text(
+                                            text = "Document · $ext" + if (docSize.isNotBlank() && docSize != "0 B") " · $docSize" else "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                                        modifier = Modifier.size(42.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Description,
+                                                contentDescription = "Document",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                         if (isLoading) {
@@ -1363,8 +1676,11 @@ fun MessageItem(
                             if (isUser) {
                                 Text(
                                     text = message.content,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.5.sp,
+                                        lineHeight = 24.sp,
+                                        color = Color(0xFF1E293B)
+                                    )
                                 )
                             } else {
                                 if (isErrorMsg) {
@@ -1444,18 +1760,7 @@ fun MessageItem(
                             }
                         }
                         
-                        // Elegantly placed, ultra-subtle timestamp inside bubble
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = formattedTime,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                            color = if (isUser) {
-                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            },
-                            modifier = Modifier.align(Alignment.End)
-                        )
+                        // Elegantly placed, ultra-subtle timestamp inside bubble - REMOVED per user request
                     }
 
                     DropdownMenu(
@@ -1467,12 +1772,6 @@ fun MessageItem(
                             .padding(vertical = 4.dp)
                             .width(220.dp)
                     ) {
-                        Text(
-                            text = if (formattedTime.isNotEmpty()) "Today, $formattedTime" else "Today",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                        )
                         DropdownMenuItem(
                             text = { Text(if (isArabic) "نسخ" else "Copy", fontWeight = FontWeight.SemiBold) },
                             leadingIcon = { Icon(Icons.Outlined.ContentCopy, null, tint = MaterialTheme.colorScheme.onSurface) },
@@ -2019,64 +2318,23 @@ fun BottomInputArea(
 
                     Spacer(modifier = Modifier.width(4.dp))
 
-                    // Model Selection Chip/Pill
-                    var showModelMenu by remember { mutableStateOf(false) }
-                    Box {
-                        Surface(
-                            onClick = { showModelMenu = true },
-                            shape = RoundedCornerShape(50),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(horizontal = 4.dp)
+                    // Nabih Ultra Model Badge
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = selectedModel.displayName,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        DropdownMenu(
-                            expanded = showModelMenu,
-                            onDismissRequest = { showModelMenu = false },
-                            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-                        ) {
-                            val allModels = listOf(
-                                com.example.models.AiModel.NABIH_ULTRA,
-                                com.example.models.AiModel.GEMINI,
-                                com.example.models.AiModel.CHATGPT,
-                                com.example.models.AiModel.CLAUDE
+                            Text(
+                                text = selectedModel.displayName,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            val availableModels = allModels.filter { model ->
-                                when (model) {
-                                    com.example.models.AiModel.NABIH_ULTRA -> true
-                                    com.example.models.AiModel.GEMINI -> settings.googleApiKey.isNotEmpty() || settings.nabihApiKey.isNotEmpty()
-                                    com.example.models.AiModel.CHATGPT -> settings.openaiApiKey.isNotEmpty()
-                                    com.example.models.AiModel.CLAUDE -> settings.anthropicApiKey.isNotEmpty()
-                                }
-                            }
-                            availableModels.forEach { model ->
-                                val isSelected = model == selectedModel
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = model.displayName,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    onClick = {
-                                        showModelMenu = false
-                                        onSelectModel(model)
-                                    }
-                                )
-                            }
                         }
                     }
 
@@ -2114,16 +2372,18 @@ fun BottomInputArea(
                         contentAlignment = Alignment.Center
                     ) {
                             if (isGenerating) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    color = iconColor,
-                                    strokeWidth = 2.dp
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .size(5.dp)
-                                        .background(iconColor, RoundedCornerShape(1.dp))
-                                )
+                                Box(contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp),
+                                        color = iconColor,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(9.dp)
+                                            .background(iconColor, RoundedCornerShape(2.dp))
+                                    )
+                                }
                             } else {
                                 Icon(
                                     imageVector = Icons.Rounded.ArrowUpward,
@@ -2153,10 +2413,6 @@ fun ConversationItem(
     modifier: Modifier = Modifier
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    val formattedTime = remember(conversation.updatedAt) {
-        val format = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
-        format.format(java.util.Date(conversation.updatedAt))
-    }
 
     Surface(
         onClick = onSelect,
@@ -2187,22 +2443,15 @@ fun ConversationItem(
                             .padding(end = 4.dp)
                     )
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = conversation.title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = formattedTime,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
+                Text(
+                    text = conversation.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
             }
             Box {
                 IconButton(onClick = { showMenu = true }, modifier = Modifier.size(32.dp)) {
@@ -2359,8 +2608,15 @@ fun MainDrawerContent(
         )
     }
 
-    ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.background) {
-        Column(modifier = Modifier.fillMaxSize()) {
+    ModalDrawerSheet(
+        drawerContainerColor = MaterialTheme.colorScheme.background,
+        drawerContentColor = MaterialTheme.colorScheme.onBackground
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
             // Header with statusBarsPadding and spacious branding
             Row(
                 modifier = Modifier
@@ -2385,13 +2641,12 @@ fun MainDrawerContent(
                     .weight(1f)
                     .padding(vertical = 12.dp)
             ) {
-                // Group 1: New Chat, Search, Files
+                // Group 1: New Chat, Search
                 item {
                     Surface(
                         onClick = { onNewChat(); onCloseDrawer() },
-                        color = MaterialTheme.colorScheme.surface,
+                        color = Color.Transparent,
                         shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
@@ -2429,16 +2684,6 @@ fun MainDrawerContent(
                         label = if (isArabic) "البحث" else "Search",
                         isSelected = false,
                         onClick = { onNavigateTo("search"); onCloseDrawer() },
-                        isArabic = isArabic
-                    )
-                }
-                
-                item {
-                    DrawerMenuItem(
-                        icon = Icons.Rounded.FolderOpen,
-                        label = if (isArabic) "الملفات" else "Files",
-                        isSelected = false,
-                        onClick = { onNavigateTo("files"); onCloseDrawer() },
                         isArabic = isArabic
                     )
                 }
@@ -2585,32 +2830,19 @@ fun MainDrawerContent(
                     .padding(bottom = 16.dp, top = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-
-                // 1. API Keys Shortcut
-                DrawerMenuItem(
-                    icon = Icons.Rounded.VpnKey,
-                    label = if (isArabic) "مفاتيح API" else "API Keys",
-                    isSelected = false,
-                    onClick = { onNavigateTo("api_keys"); onCloseDrawer() },
-                    isArabic = isArabic
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // 2. Modern M3 Account Card
-                Card(
+                // 1. Modern M3 Account Card
+                Surface(
                     onClick = { onNavigateTo("account"); onCloseDrawer() },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color.Transparent,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .padding(horizontal = 16.dp, vertical = 2.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {

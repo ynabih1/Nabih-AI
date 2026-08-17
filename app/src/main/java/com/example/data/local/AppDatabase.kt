@@ -5,10 +5,19 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
+/**
+ * Main Room Database for Nabih AI.
+ *
+ * NOTE FOR DEVELOPERS:
+ * Schema export is enabled (exportSchema = true).
+ * Any changes to entity structures or table schemas MUST include an explicit [androidx.room.migration.Migration]
+ * object registered via .addMigrations(...) prior to bumping the database version number.
+ * Do NOT re-enable destructive migration on upgrade, as this will erase all user chat history and accounts.
+ */
 @Database(
     entities = [Folder::class, Conversation::class, Message::class, MemoryItem::class, UserAccount::class, ErrorLog::class],
     version = 5,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun folderDao(): FolderDao
@@ -29,7 +38,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "nabih_ai_database"
                 )
-                .fallbackToDestructiveMigration()
+                .fallbackToDestructiveMigrationOnDowngrade()
                 .build()
                 INSTANCE = instance
                 instance

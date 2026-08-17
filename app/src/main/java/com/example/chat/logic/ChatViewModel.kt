@@ -165,6 +165,21 @@ class ChatViewModel(
         _selectedModel.value = AiModel.fromId(modelId)
     }
 
+    fun resetChatState() {
+        _activeConversationId.value = null
+        settingsRepository.saveLastActiveConversationId(null)
+        activeConversationMessagesFlow?.cancel()
+        _uiState.value = ChatUiState.Idle
+        _currentStreamingResponse.value = ""
+        _attachedImageUri.value = null
+        _attachedDocUri.value = null
+        _attachedDocName.value = null
+        _currentInputText.value = ""
+        savedStateHandle["draft_text"] = ""
+        _searchQuery.value = ""
+        _pinnedMessageIds.value = emptySet()
+    }
+
     fun selectConversation(id: String) {
         _activeConversationId.value = id
         settingsRepository.saveLastActiveConversationId(id)
@@ -267,23 +282,10 @@ class ChatViewModel(
     }
 
     fun getAlternativeModel(failedModel: AiModel = selectedModel.value): AiModel {
-        val settings = settingsRepository.settings.value
-        val candidates = listOf(AiModel.NABIH_ULTRA, AiModel.GEMINI, AiModel.CHATGPT, AiModel.CLAUDE)
-        for (model in candidates) {
-            if (model == failedModel) continue
-            val isValid = when (model.provider) {
-                com.example.models.ApiProvider.NABIH -> true
-                com.example.models.ApiProvider.GOOGLE -> settings.googleApiKey.isNotBlank() || settings.nabihApiKey.isNotBlank() || com.example.BuildConfig.GEMINI_API_KEY.isNotBlank()
-                com.example.models.ApiProvider.OPENAI -> settings.openaiApiKey.isNotBlank()
-                com.example.models.ApiProvider.ANTHROPIC -> settings.anthropicApiKey.isNotBlank()
-            }
-            if (isValid) return model
-        }
-        return if (failedModel == AiModel.NABIH_ULTRA) AiModel.GEMINI else AiModel.NABIH_ULTRA
+        return AiModel.NABIH_ULTRA
     }
 
     fun retryWithAlternativeModel(alternativeModel: AiModel) {
-        selectModel(alternativeModel)
         retryLastResponse()
     }
 
@@ -562,24 +564,6 @@ class ChatViewModel(
 
         // Save with "API_ERROR:" prefix so the UI knows to render it beautifully as an error bubble with retry action
         saveMessage(convId, "model", "API_ERROR: $userMsg")
-
-        // Trigger fallback model proposal dialog if 429 or 500 error occurs
-        val isServerOrRateLimit = if (e is retrofit2.HttpException) {
-            e.code() == 429 || e.code() in 500..599
-        } else {
-            val msg = e.localizedMessage ?: e.message ?: ""
-            msg.contains("429") || msg.contains("500") || msg.contains("502") || msg.contains("503") || msg.contains("504")
-        }
-
-        if (isServerOrRateLimit) {
-            val suggestedModel = if (currentModelObj == AiModel.NABIH_ULTRA) AiModel.GEMINI else AiModel.NABIH_ULTRA
-            _fallbackDialogState.value = FallbackDialogState(
-                show = true,
-                failedModel = currentModelObj,
-                suggestedModel = suggestedModel,
-                conversationId = convId
-            )
-        }
     }
 
     private fun saveMessage(conversationId: String, role: String, content: String) {

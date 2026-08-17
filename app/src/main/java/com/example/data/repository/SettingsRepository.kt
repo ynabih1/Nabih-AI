@@ -25,7 +25,7 @@ class SettingsRepository(context: Context) {
 
     private fun loadSettings(): AppSettings {
         val themeStr = prefs.getString("theme", AppTheme.LIGHT.name) ?: AppTheme.LIGHT.name
-        val langStr = prefs.getString("language", AppLanguage.ENGLISH.name) ?: AppLanguage.ENGLISH.name
+        val langStr = prefs.getString("language", AppLanguage.ARABIC.name) ?: AppLanguage.ARABIC.name
         val fontStr = prefs.getString("font_size", FontSize.MEDIUM.name) ?: FontSize.MEDIUM.name
         val modelStr = prefs.getString("default_model", AiModel.NABIH_ULTRA.name) ?: AiModel.NABIH_ULTRA.name
         

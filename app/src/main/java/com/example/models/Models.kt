@@ -10,8 +10,8 @@ enum class ApiProvider(val displayName: String) {
 enum class AiModel(
     val id: String,
     val displayName: String,
-    val provider: ApiProvider,
-    val description: String,
+    val provider: ApiProvider = ApiProvider.NABIH,
+    val description: String = "Nabih Ultra AI Flagship Model",
     val supportsImages: Boolean = true,
     val supportsDocuments: Boolean = true
 ) {
@@ -19,39 +19,13 @@ enum class AiModel(
         id = "nabih-ultra",
         displayName = "Nabih Ultra",
         provider = ApiProvider.NABIH,
-        description = "Nabih AI's native flagship model. Fast, accurate, and completely free to use.",
-        supportsImages = true,
-        supportsDocuments = true
-    ),
-    GEMINI(
-        id = "gemini-3.6-flash",
-        displayName = "Gemini",
-        provider = ApiProvider.GOOGLE,
-        description = "Google's flagship model for advanced reasoning, coding, and complex tasks.",
-        supportsImages = true,
-        supportsDocuments = true
-    ),
-    CHATGPT(
-        id = "gpt-5",
-        displayName = "ChatGPT",
-        provider = ApiProvider.OPENAI,
-        description = "OpenAI's latest next-generation frontier intelligence model.",
-        supportsImages = true,
-        supportsDocuments = true
-    ),
-    CLAUDE(
-        id = "claude-3-7-sonnet",
-        displayName = "Claude",
-        provider = ApiProvider.ANTHROPIC,
-        description = "Anthropic's flagship state-of-the-art model with hybrid thinking.",
+        description = "النموذج الافتراضي المعتمد عبر Firebase AI SDK",
         supportsImages = true,
         supportsDocuments = true
     );
 
     companion object {
-        fun fromId(id: String): AiModel {
-            return values().find { it.id == id } ?: NABIH_ULTRA
-        }
+        fun fromId(id: String): AiModel = NABIH_ULTRA
     }
 }
 
@@ -89,7 +63,7 @@ enum class FontSize(val scale: Float, val displayName: String) {
 
 data class AppSettings(
     val theme: AppTheme = AppTheme.LIGHT, // white background, flat design is default
-    val language: AppLanguage = AppLanguage.ENGLISH,
+    val language: AppLanguage = AppLanguage.ARABIC,
     val fontSize: FontSize = FontSize.MEDIUM,
     val defaultModel: AiModel = AiModel.NABIH_ULTRA,
     val voiceEnabled: Boolean = true,

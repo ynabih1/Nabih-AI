@@ -1,0 +1,46 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Connections -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="24"
+        android:strokeLineCap="round"
+        android:pathData="M 65 65 C 100 65 140 30 140 60" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="24"
+        android:strokeLineCap="round"
+        android:pathData="M 65 65 C 50 100 100 130 100 160" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="24"
+        android:strokeLineCap="round"
+        android:pathData="M 100 160 C 130 160 140 120 150 130" />
+
+    <!-- Top Left Node -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 65 25 A 40 40 0 1 0 65 105 A 40 40 0 1 0 65 25 Z" />
+    
+    <!-- Top Right Node -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 140 35 A 25 25 0 1 0 140 85 A 25 25 0 1 0 140 35 Z" />
+        
+    <!-- Bottom Center Node -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 100 135 A 25 25 0 1 0 100 185 A 25 25 0 1 0 100 135 Z" />
+
+    <!-- Bottom Right Chat Node -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 150 90 A 40 40 0 1 0 150 170 A 40 40 0 1 0 150 90 Z" />
+    <!-- Chat Tail -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 130 160 L 130 190 L 155 168 Z" />
+</vector>

@@ -2,6 +2,7 @@ package com.example.settings.profile
 
 import com.example.models.*
 
+import com.example.data.repository.ChatRepository
 import com.example.data.repository.SettingsRepository
 import com.example.data.local.MemoryItem
 import com.example.models.AiModel
@@ -22,7 +23,8 @@ import kotlinx.coroutines.withContext
 
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
-    private val memoryRepository: MemoryRepository
+    private val memoryRepository: MemoryRepository,
+    private val chatRepository: ChatRepository? = null
 ) : ViewModel() {
 
     val settings: StateFlow<AppSettings> = settingsRepository.settings
@@ -72,7 +74,14 @@ class SettingsViewModel(
         settingsRepository.updateBiometricsEnabled(enabled)
     }
 
-    fun logout() {
+    suspend fun logout() {
+        try {
+            chatRepository?.deleteAllConversations()
+            memoryRepository.deleteAllMemories()
+        } catch (e: Exception) {
+            android.util.Log.e("SettingsViewModel", "Error clearing user data on logout", e)
+        }
+        settingsRepository.saveLastActiveConversationId(null)
         settingsRepository.logout()
     }
 
@@ -289,37 +298,6 @@ class SettingsViewModel(
                             )
                         ),
                         generationConfig = com.example.models.GeminiGenerationConfig(maxOutputTokens = 1)
-                    )
-                )
-            }
-            results.add(res)
-        }
-
-        // 3. OpenAI Key Validation
-        if (trimmedOpenai.isNotEmpty() && trimmedOpenai != settings.value.openaiApiKey) {
-            val res = validateKeyGeneric("OpenAI", trimmedOpenai, isArabic) {
-                com.example.models.NetworkClient.openAiService.generateCompletion(
-                    url = "https://api.openai.com/v1/chat/completions",
-                    authorization = "Bearer $trimmedOpenai",
-                    request = com.example.models.OpenAiRequest(
-                        model = "gpt-4o-mini",
-                        messages = listOf(com.example.models.OpenAiMessage("user", "Ping")),
-                        temperature = 0.7f
-                    )
-                )
-            }
-            results.add(res)
-        }
-
-        // 4. Anthropic Claude Key Validation
-        if (trimmedAnthropic.isNotEmpty() && trimmedAnthropic != settings.value.anthropicApiKey) {
-            val res = validateKeyGeneric("Anthropic Claude", trimmedAnthropic, isArabic) {
-                com.example.models.NetworkClient.claudeService.generateMessage(
-                    apiKey = trimmedAnthropic,
-                    request = com.example.models.ClaudeRequest(
-                        model = "claude-3-haiku-20240307",
-                        messages = listOf(com.example.models.ClaudeMessage("user", "Ping")),
-                        max_tokens = 1
                     )
                 )
             }

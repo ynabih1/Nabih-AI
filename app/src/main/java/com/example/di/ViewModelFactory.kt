@@ -17,7 +17,7 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
     override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
         return when {
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> {
-                SettingsViewModel(container.settingsRepository, container.memoryRepository) as T
+                SettingsViewModel(container.settingsRepository, container.memoryRepository, container.chatRepository) as T
             }
             modelClass.isAssignableFrom(HomeViewModel::class.java) -> {
                 HomeViewModel(container.chatRepository) as T

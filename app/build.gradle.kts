@@ -102,6 +102,10 @@ secrets {
   ignoreList.add("GEMINI_API_KEY")
 }
 
+ksp {
+  arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 googleServices {
   missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN
 }
@@ -139,6 +143,9 @@ dependencies {
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
   implementation(libs.play.services.auth)
+  implementation(libs.androidx.credentials)
+  implementation(libs.androidx.credentials.play.services.auth)
+  implementation(libs.googleid)
   implementation(libs.androidx.security.crypto)
   implementation(libs.retrofit)
   testImplementation(libs.androidx.compose.ui.test.junit4)

@@ -193,6 +193,7 @@ fun AccountScreen(
                                 } catch (e: Exception) {
                                     android.util.Log.e("AccountScreen", "Google SignOut error", e)
                                 }
+                                settingsViewModel.logout()
                                 android.util.Log.d("AuthPerformance", "signOut COMPLETED in ${System.currentTimeMillis() - startTime}ms")
                                 showLogoutDialog = false
                                 onLogout()

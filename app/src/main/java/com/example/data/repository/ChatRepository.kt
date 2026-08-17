@@ -15,16 +15,12 @@ import com.example.data.local.ErrorLogDao
 import com.example.models.AiModel
 import com.example.models.ReasoningMode
 import com.example.models.ApiProvider
-import com.example.models.ClaudeMessage
-import com.example.models.ClaudeRequest
 import com.example.models.GeminiContent
 import com.example.models.GeminiGenerationConfig
 import com.example.models.GeminiInlineData
 import com.example.models.GeminiPart
 import com.example.models.GeminiRequest
 import com.example.models.NetworkClient
-import com.example.models.OpenAiMessage
-import com.example.models.OpenAiRequest
 import com.example.data.repository.SettingsRepository
 
 import android.content.Context
@@ -392,7 +388,7 @@ class ChatRepository(
             }
 
             if (isArabic) {
-                systemPrompt += "Arabic Post-Processing: Enforce proper Arabic grammar and essential diacritics (Tashkeel) to resolve ambiguity. Ensure zero spelling errors."
+                systemPrompt += "Arabic Language Style Instruction: Write strictly in fluent, natural, grammatically correct Arabic (فصحى سلسة وسليمة نحوياً) WITHOUT any diacritical marks or Tashkeel (ممنوع منعاً باتاً التشكيل: بدون فتحة، ضمة، كسرة، سكون، شدة، أو تنوين على أي حرف). اكتب النصوص بدون تشكيل نهائياً تماماً كالكتابة الصحفية واليومية المعتادة."
             }
                     
             var activePrompt = prompt.replace(Regex("\\[REASONING MODE:.*?\\]", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "").trim()

@@ -130,7 +130,14 @@ fun LoginScreen(
 
     // FirebaseAuth Instance
     val firebaseAuth = remember { FirebaseAuth.getInstance() }
-    val webClientId = context.getString(com.example.R.string.default_web_client_id)
+    val webClientId = remember(context) {
+        try {
+            val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+            if (resId != 0) context.getString(resId) else "24318168756-i7hlejdrh54oddfhbhigbj8ar2jv3khd.apps.googleusercontent.com"
+        } catch (e: Exception) {
+            "24318168756-i7hlejdrh54oddfhbhigbj8ar2jv3khd.apps.googleusercontent.com"
+        }
+    }
 
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()

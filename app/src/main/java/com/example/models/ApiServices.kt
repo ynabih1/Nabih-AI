@@ -68,58 +68,6 @@ data class GeminiListModelsResponse(
     val models: List<GeminiModel>? = null
 )
 
-// --- OpenAI Models ---
-
-data class OpenAiMessage(
-    val role: String,
-    val content: Any // Can be String or List of Content Parts for multimodal
-)
-
-data class OpenAiRequest(
-    val model: String,
-    val messages: List<OpenAiMessage>,
-    val temperature: Float = 0.7f,
-    val stream: Boolean = false
-)
-
-data class OpenAiChoice(
-    val message: OpenAiMessageContent?
-)
-
-data class OpenAiMessageContent(
-    val role: String?,
-    val content: String?
-)
-
-data class OpenAiResponse(
-    val choices: List<OpenAiChoice>?
-)
-
-// --- Anthropic Claude Models ---
-
-data class ClaudeMessage(
-    val role: String,
-    val content: String
-)
-
-data class ClaudeRequest(
-    val model: String,
-    val messages: List<ClaudeMessage>,
-    val max_tokens: Int = 4000,
-    val system: String? = null,
-    val temperature: Float = 0.7f,
-    val stream: Boolean = false
-)
-
-data class ClaudeContentPart(
-    val type: String,
-    val text: String?
-)
-
-data class ClaudeResponse(
-    val content: List<ClaudeContentPart>?
-)
-
 // --- Wikipedia Models ---
 data class WikipediaSearchResponse(
     val query: WikipediaQuery?
@@ -168,42 +116,6 @@ interface GeminiApiService {
     ): GeminiListModelsResponse
 }
 
-interface OpenAiApiService {
-    @POST
-    suspend fun generateCompletion(
-        @Url url: String,
-        @Header("Authorization") authorization: String,
-        @Body request: OpenAiRequest
-    ): OpenAiResponse
-
-    @POST
-    @Streaming
-    suspend fun generateCompletionStream(
-        @Url url: String,
-        @Header("Authorization") authorization: String,
-        @Body request: OpenAiRequest
-    ): ResponseBody
-}
-
-interface ClaudeApiService {
-    @POST("v1/messages")
-    suspend fun generateMessage(
-        @Header("x-api-key") apiKey: String,
-        @Header("anthropic-version") anthropicVersion: String = "2023-06-01",
-        @Header("content-type") contentType: String = "application/json",
-        @Body request: ClaudeRequest
-    ): ClaudeResponse
-
-    @POST("v1/messages")
-    @Streaming
-    suspend fun generateMessageStream(
-        @Header("x-api-key") apiKey: String,
-        @Header("anthropic-version") anthropicVersion: String = "2023-06-01",
-        @Header("content-type") contentType: String = "application/json",
-        @Body request: ClaudeRequest
-    ): ResponseBody
-}
-
 // --- Retrofit Network Client ---
 
 object NetworkClient {
@@ -248,24 +160,6 @@ object NetworkClient {
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
             .create(GeminiApiService::class.java)
-    }
-
-    val openAiService: OpenAiApiService by lazy {
-        Retrofit.Builder()
-            .baseUrl("https://api.openai.com/")
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-            .create(OpenAiApiService::class.java)
-    }
-
-    val claudeService: ClaudeApiService by lazy {
-        Retrofit.Builder()
-            .baseUrl("https://api.anthropic.com/")
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-            .create(ClaudeApiService::class.java)
     }
 
     val wikipediaService: WikipediaApiService by lazy {

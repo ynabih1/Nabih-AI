@@ -20,6 +20,9 @@ class NabihApplication : Application() {
         Firebase.appCheck.installAppCheckProviderFactory(
             PlayIntegrityAppCheckProviderFactory.getInstance()
         )
+
+        // Migrate any leftover unencrypted fallback keys to encrypted storage
+        com.example.utils.SecureStorage(this).migratePlaintextKeysToEncrypted()
         
         // NOTE FOR DEVELOPER (Manual steps outside AI Studio):
         // 1. Enable Play Integrity API in Google Cloud Console for the project 'nabih-ai'

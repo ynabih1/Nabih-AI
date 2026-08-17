@@ -31,23 +31,42 @@ class SecureStorage(private val context: Context) {
 
     fun saveKey(keyName: String, keyValue: String): Boolean {
         val cleanValue = keyValue.trim()
-        var savedInEncrypted = false
+
         try {
-            if (encryptedPrefs != null) {
-                encryptedPrefs?.edit()?.putString(keyName, cleanValue)?.apply()
-                savedInEncrypted = true
+            val prefs = encryptedPrefs
+            if (prefs != null) {
+                prefs.edit().putString(keyName, cleanValue).apply()
+                // نجح التشفير: احذف أي نسخة قديمة غير مشفرة متبقية من هذا المفتاح إن وُجدت
+                fallbackPrefs.edit().remove(keyName).apply()
+                return true
             }
         } catch (e: Exception) {
-            Log.e("SecureStorage", "Failed to save key in encryptedPrefs, saving to fallback", e)
+            Log.e("SecureStorage", "Encrypted save failed, using fallback storage", e)
         }
 
+        // نصل هنا فقط إذا فشل التشفير فعلياً
         return try {
             fallbackPrefs.edit().putString(keyName, cleanValue).commit()
+            Log.w("SecureStorage", "Key '$keyName' saved WITHOUT encryption (fallback mode)")
             true
         } catch (e: Exception) {
             Log.e("SecureStorage", "Failed to save key in fallbackPrefs", e)
-            savedInEncrypted
+            false
         }
+    }
+
+    fun migratePlaintextKeysToEncrypted() {
+        val prefs = encryptedPrefs ?: return
+        val allFallbackKeys = fallbackPrefs.all
+        if (allFallbackKeys.isEmpty()) return
+
+        val editor = prefs.edit()
+        allFallbackKeys.forEach { (key, value) ->
+            if (value is String) editor.putString(key, value)
+        }
+        editor.apply()
+        fallbackPrefs.edit().clear().apply()
+        Log.i("SecureStorage", "Migrated ${allFallbackKeys.size} plaintext keys to encrypted storage")
     }
 
     fun getKey(keyName: String): String {
