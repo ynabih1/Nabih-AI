@@ -289,7 +289,7 @@ fun LoginScreen(
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
-    val isArabic = settings.language == AppLanguage.ARABIC
+    val isArabic = false // Interface locked to English
     val isDark = isSystemInDarkTheme()
 
     // Palette inspired by Claude warm minimalism

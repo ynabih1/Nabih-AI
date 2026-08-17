@@ -41,7 +41,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
-    val isArabic = settings.language == AppLanguage.ARABIC
+    val isArabic = false // Interface locked to English
     val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
