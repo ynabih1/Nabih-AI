@@ -400,7 +400,7 @@ fun MainScreen(
     onNavigateToRoute: (String) -> Unit = {}
 ) {
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
-    val isArabic = false // Interface locked to English
+    val isArabic = settings.language == AppLanguage.ARABIC
     val activeConversations by homeViewModel.activeConversations.collectAsStateWithLifecycle(emptyList())
     
     val chatState by chatViewModel.uiState.collectAsStateWithLifecycle()

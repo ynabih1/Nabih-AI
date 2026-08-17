@@ -91,16 +91,20 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
-            val layoutDirection = LayoutDirection.Ltr
+            val layoutDirection = if (settings.language == AppLanguage.ARABIC) {
+                LayoutDirection.Rtl
+            } else {
+                LayoutDirection.Ltr
+            }
 
-            // Interface strictly locked to English (LTR)
+            // Dynamically provide Language Alignment (RTL / LTR) across layouts
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                 val darkTheme = when (settings.theme) {
                     com.example.models.AppTheme.DARK -> true
                     com.example.models.AppTheme.LIGHT -> false
                     com.example.models.AppTheme.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
                 }
-                NabihTheme(darkTheme = darkTheme, isArabic = false) {
+                NabihTheme(darkTheme = darkTheme, isArabic = settings.language == AppLanguage.ARABIC) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                         val navController = rememberNavController()
 
@@ -108,17 +112,19 @@ class MainActivity : ComponentActivity() {
                             navController = navController,
                             startDestination = if (settings.isLoggedIn) "home" else "login"
                         ) {
-                            // Onboarding and Premium Sign-in
+                            // Onboarding and Premium Sign-in (Always English LTR)
                             composable("login") {
-                                LoginScreen(
-                                    settingsViewModel = settingsViewModel,
-                                    onLoginSuccess = {
-                                        chatViewModel.resetChatState()
-                                        navController.navigate("home") {
-                                            popUpTo("login") { inclusive = true }
+                                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                    LoginScreen(
+                                        settingsViewModel = settingsViewModel,
+                                        onLoginSuccess = {
+                                            chatViewModel.resetChatState()
+                                            navController.navigate("home") {
+                                                popUpTo("login") { inclusive = true }
+                                            }
                                         }
-                                    }
-                                )
+                                    )
+                                }
                             }
 
                             // Home Screen Routing
@@ -140,7 +146,6 @@ class MainActivity : ComponentActivity() {
                             composable("settings") {
                                 SettingsScreen(
                                     settingsViewModel = settingsViewModel,
-
                                     onNavigateBack = {
                                         navController.popBackStack()
                                     }
@@ -148,20 +153,20 @@ class MainActivity : ComponentActivity() {
                             }
 
                             composable("saved") {
-                                SavedChatsScreen(onNavigateBack = { navController.popBackStack() }, isArabic = false)
+                                SavedChatsScreen(onNavigateBack = { navController.popBackStack() }, isArabic = settings.language == AppLanguage.ARABIC)
                             }
                             composable("files") {
                                 FilesScreen(
                                     chatViewModel = chatViewModel,
                                     onNavigateBack = { navController.popBackStack() },
-                                    isArabic = false
+                                    isArabic = settings.language == AppLanguage.ARABIC
                                 )
                             }
                             composable("account") {
                                 AccountScreen(
                                     settingsViewModel = settingsViewModel,
                                     onNavigateBack = { navController.popBackStack() },
-                                    isArabic = false,
+                                    isArabic = settings.language == AppLanguage.ARABIC,
                                     onLogout = {
                                         chatViewModel.resetChatState()
                                         navController.navigate("login") {
@@ -183,10 +188,10 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             composable("privacy") {
-                                PrivacyScreen(onNavigateBack = { navController.popBackStack() }, isArabic = false)
+                                PrivacyScreen(onNavigateBack = { navController.popBackStack() }, isArabic = settings.language == AppLanguage.ARABIC)
                             }
                             composable("help") {
-                                HelpScreen(onNavigateBack = { navController.popBackStack() }, isArabic = false)
+                                HelpScreen(onNavigateBack = { navController.popBackStack() }, isArabic = settings.language == AppLanguage.ARABIC)
                             }
                         }
                     }
