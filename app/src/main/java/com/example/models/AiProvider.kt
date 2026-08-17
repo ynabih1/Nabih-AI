@@ -13,16 +13,24 @@ import com.google.firebase.Firebase
 import com.google.firebase.remoteconfig.remoteConfig
 import kotlinx.coroutines.tasks.await
 
-suspend fun getCurrentGeminiModelName(): String {
-    return try {
+private var cachedGeminiModelName: String = "gemini-3.7-flash"
+
+fun getCurrentGeminiModelName(): String {
+    return cachedGeminiModelName
+}
+
+fun initRemoteConfigAsync() {
+    try {
         val remoteConfig = Firebase.remoteConfig
         remoteConfig.setDefaultsAsync(mapOf("gemini_model_name" to "gemini-3.7-flash"))
-        remoteConfig.fetchAndActivate().await()
-        val fetched = remoteConfig.getString("gemini_model_name")
-        if (fetched.isNotBlank() && fetched != "gemini-3.6-flash") fetched else "gemini-3.7-flash"
+        remoteConfig.fetchAndActivate().addOnSuccessListener {
+            val fetched = remoteConfig.getString("gemini_model_name")
+            if (fetched.isNotBlank() && fetched != "gemini-3.6-flash") {
+                cachedGeminiModelName = fetched
+            }
+        }
     } catch (e: Exception) {
-        android.util.Log.e("RemoteConfig", "Fetch failed, using default gemini-3.7-flash", e)
-        "gemini-3.7-flash"
+        android.util.Log.e("RemoteConfig", "Async init failed", e)
     }
 }
 
@@ -283,33 +291,13 @@ object AiRouter {
                     ).collect { chunk ->
                         chunkCollector.append(chunk)
                         val accumulated = chunkCollector.toString()
-
-                        if (!validated) {
-                            if (accumulated.length > 20) {
-                                val testStrLower = accumulated.trimStart().lowercase()
-                                val isBad = testStrLower.startsWith("{") || testStrLower.startsWith("[") || 
-                                            testStrLower.startsWith("exception:") || testStrLower.startsWith("error:") ||
-                                            testStrLower.startsWith("api_error") ||
-                                            testStrLower.contains("match result value") || testStrLower.contains("stack trace") || 
-                                            testStrLower.contains("debug output") || testStrLower.contains("raw json parsing error")
-                                if (isBad) {
-                                    throw Exception("VALIDATION_FAILED: Bad response")
-                                }
-                                validated = true
-                                emit(accumulated)
-                            }
-                        } else {
-                            emit(accumulated)
-                        }
+                        emit(accumulated)
                     }
 
-                    if (!validated) {
-                        val finalStr = chunkCollector.toString().trim()
-                        val lower = finalStr.lowercase()
-                        if (finalStr.isEmpty() || lower == "null" || lower == "undefined" || lower.startsWith("{") || lower.startsWith("[") || lower.contains("match result value")) {
-                            throw Exception("VALIDATION_FAILED: Empty or invalid response")
-                        }
-                        emit(finalStr)
+                    val finalStr = chunkCollector.toString().trim()
+                    val lower = finalStr.lowercase()
+                    if (finalStr.isEmpty() || lower == "null" || lower == "undefined") {
+                        throw Exception("VALIDATION_FAILED: Empty response")
                     }
 
                     modelSuccess = true

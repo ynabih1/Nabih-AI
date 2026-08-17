@@ -323,16 +323,6 @@ fun LoginScreen(
                                 color = MaterialTheme.colorScheme.onBackground,
                                 letterSpacing = (-0.5).sp
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = if (isArabic) "مساعدك الذكي لكل شيء" else "Your smart assistant for everything",
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontFamily = if (isArabic) com.example.ui.theme.ArabicFamily else com.example.ui.theme.BodySansFamily
-                                ),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
-                            )
                         }
 
                         // Fixed space between header and interactive group

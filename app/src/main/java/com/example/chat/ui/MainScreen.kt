@@ -1500,294 +1500,189 @@ fun MessageItem(
         )
     }
 
-        val bubbleShape = if (isUser) {
-            RoundedCornerShape(20.dp)
-        } else {
-            RoundedCornerShape(
-                topStart = 20.dp,
-                topEnd = 20.dp,
-                bottomStart = 4.dp,
-                bottomEnd = 20.dp
-            )
-        }
-        
-        Column(
-            modifier = Modifier
-                .fillMaxWidth(if (isUser) 0.85f else 1f)
-                .wrapContentWidth(if (isUser) Alignment.End else Alignment.Start),
-            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
-        ) {
-            Surface(
-                shape = bubbleShape,
-                color = Color.Transparent,
-                border = null,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
+        if (isUser) {
+            Column(
                 modifier = Modifier
-                    .clickable(enabled = !isLoading) { showMenu = true }
+                    .fillMaxWidth(0.85f)
+                    .wrapContentWidth(Alignment.End),
+                horizontalAlignment = Alignment.End
             ) {
-                Box {
-                    Column(
-                        modifier = Modifier.padding(
-                            horizontal = 0.dp,
-                            vertical = 4.dp
-                        )
-                    ) {
-                        if (message.imageUri != null) {
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 120.dp, max = 340.dp)
-                                    .padding(bottom = 8.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .clickable { showFullScreenImage = true }
-                            ) {
-                                coil.compose.SubcomposeAsyncImage(
-                                    model = message.imageUri,
-                                    contentDescription = "Attached Image",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-                                    loading = {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(180.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(32.dp),
-                                                strokeWidth = 2.5.dp,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    },
-                                    error = {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(130.dp)
-                                                .padding(16.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Column(
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                verticalArrangement = Arrangement.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.BrokenImage,
-                                                    contentDescription = "Failed to load image",
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                                    modifier = Modifier.size(36.dp)
-                                                )
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                                Text(
-                                                    text = if (isArabic) "تعذر تحميل الصورة" else "Failed to load image",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                                    textAlign = TextAlign.Center
-                                                )
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                        if (message.documentUri != null) {
-                            val docUri = remember(message.documentUri) {
-                                try { Uri.parse(message.documentUri) } catch (e: Exception) { null }
-                            }
-                            val docSize = remember(docUri) {
-                                if (docUri != null) FileUtils.getUriSizeFormatted(context, docUri) else ""
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 8.dp)
-                                    .clickable {
-                                        openDocumentExternally(
-                                            context = context,
-                                            documentUriString = message.documentUri,
-                                            documentName = message.documentName,
-                                            isArabic = isArabic
-                                        )
-                                    }
-                            ) {
-                                Row(
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = null,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                    modifier = Modifier.clickable(enabled = !isLoading) { showMenu = true }
+                ) {
+                    Box {
+                        Column(
+                            modifier = Modifier.padding(
+                                horizontal = 16.dp,
+                                vertical = 10.dp
+                            )
+                        ) {
+                            if (message.imageUri != null) {
+                                Card(
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    ),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .heightIn(min = 120.dp, max = 340.dp)
+                                        .padding(bottom = 8.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .clickable { showFullScreenImage = true }
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = message.documentName ?: (if (isArabic) "مستند مرفق" else "Attached Document"),
-                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        val ext = message.documentName?.substringAfterLast('.', "")?.uppercase()?.ifEmpty { "DOC" } ?: "DOC"
-                                        Text(
-                                            text = "Document · $ext" + if (docSize.isNotBlank() && docSize != "0 B") " · $docSize" else "",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                                        modifier = Modifier.size(42.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Description,
-                                                contentDescription = "Document",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(22.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (isLoading) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                TypingAnimation()
-                                if (message.content.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = message.content, 
-                                        style = MaterialTheme.typography.bodyMedium, 
-                                        color = if (isUser) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        } else {
-                            if (isUser) {
-                                Text(
-                                    text = message.content,
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 16.sp,
-                                        lineHeight = 24.sp,
-                                        fontWeight = FontWeight.Normal,
-                                        color = MaterialTheme.colorScheme.onBackground
-                                    )
-                                )
-                            } else {
-                                if (isErrorMsg) {
-                                    Row(
-                                        verticalAlignment = Alignment.Top,
-                                        modifier = Modifier.padding(vertical = 4.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Info,
-                                            contentDescription = "Error",
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(20.dp).padding(top = 2.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Column {
-                                            Text(
-                                                text = cleanContent,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Spacer(modifier = Modifier.height(10.dp))
-                                            Row(
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                verticalAlignment = Alignment.CenterVertically
+                                    coil.compose.SubcomposeAsyncImage(
+                                        model = message.imageUri,
+                                        contentDescription = "Attached Image",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                        loading = {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(180.dp),
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                OutlinedButton(
-                                                    onClick = onRetry,
-                                                    shape = RoundedCornerShape(10.dp),
-                                                    colors = ButtonDefaults.outlinedButtonColors(
-                                                        contentColor = MaterialTheme.colorScheme.primary
-                                                    ),
-                                                    modifier = Modifier.minimumInteractiveComponentSize()
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(32.dp),
+                                                    strokeWidth = 2.5.dp,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        },
+                                        error = {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(130.dp)
+                                                    .padding(16.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Column(
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    verticalArrangement = Arrangement.Center
                                                 ) {
-                                                    Icon(Icons.Rounded.Refresh, contentDescription = "Retry", modifier = Modifier.size(16.dp))
-                                                    Spacer(modifier = Modifier.width(6.dp))
-                                                    Text(if (isArabic) "إعادة المحاولة" else "Retry")
-                                                }
-
-                                                if (alternativeModel != null) {
-                                                    Button(
-                                                        onClick = { onRetryWithAlternative(alternativeModel) },
-                                                        shape = RoundedCornerShape(10.dp),
-                                                        colors = ButtonDefaults.buttonColors(
-                                                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                                        ),
-                                                        modifier = Modifier.minimumInteractiveComponentSize()
-                                                    ) {
-                                                        Icon(Icons.Rounded.SwapHoriz, contentDescription = "Try alternative", modifier = Modifier.size(16.dp))
-                                                        Spacer(modifier = Modifier.width(6.dp))
-                                                        Text(if (isArabic) "جرّب مع ${alternativeModel.displayName}" else "Try with ${alternativeModel.displayName}")
-                                                    }
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.BrokenImage,
+                                                        contentDescription = "Failed to load image",
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                        modifier = Modifier.size(36.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    Text(
+                                                        text = if (isArabic) "تعذر تحميل الصورة" else "Failed to load image",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                        textAlign = TextAlign.Center
+                                                    )
                                                 }
                                             }
                                         }
-                                    }
-                                } else {
-                                    // Blinking cursor setup for streaming text
-                                    val finalContent = if (isStreaming && message.content.isNotEmpty()) {
-                                        val infiniteTransition = rememberInfiniteTransition(label = "cursor")
-                                        val alpha by infiniteTransition.animateFloat(
-                                            initialValue = 0.2f,
-                                            targetValue = 1f,
-                                            animationSpec = infiniteRepeatable(
-                                                animation = tween(durationMillis = 400, easing = LinearEasing),
-                                                repeatMode = RepeatMode.Reverse
-                                            ),
-                                            label = "alpha"
-                                        )
-                                        message.content + " ▌"
-                                    } else {
-                                        message.content
-                                    }
-                                    
-                                    MarkdownRenderer(text = finalContent)
+                                    )
                                 }
                             }
+                            if (message.documentUri != null) {
+                                val docUri = remember(message.documentUri) {
+                                    try { Uri.parse(message.documentUri) } catch (e: Exception) { null }
+                                }
+                                val docSize = remember(docUri) {
+                                    if (docUri != null) FileUtils.getUriSizeFormatted(context, docUri) else ""
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 8.dp)
+                                        .clickable {
+                                            openDocumentExternally(
+                                                context = context,
+                                                documentUriString = message.documentUri,
+                                                documentName = message.documentName,
+                                                isArabic = isArabic
+                                            )
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = message.documentName ?: (if (isArabic) "مستند مرفق" else "Attached Document"),
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            val ext = message.documentName?.substringAfterLast('.', "")?.uppercase()?.ifEmpty { "DOC" } ?: "DOC"
+                                            Text(
+                                                text = "Document · $ext" + if (docSize.isNotBlank() && docSize != "0 B") " · $docSize" else "",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                                            modifier = Modifier.size(42.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Description,
+                                                    contentDescription = "Document",
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Text(
+                                text = message.content,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontSize = 16.sp,
+                                    lineHeight = 24.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
                         }
-                        
-                        // Elegantly placed, ultra-subtle timestamp inside bubble - REMOVED per user request
-                    }
 
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false },
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .background(MaterialTheme.colorScheme.surface)
-                            .padding(vertical = 4.dp)
-                            .width(220.dp)
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(if (isArabic) "نسخ" else "Copy", fontWeight = FontWeight.SemiBold) },
-                            leadingIcon = { Icon(Icons.Outlined.ContentCopy, null, tint = MaterialTheme.colorScheme.onSurface) },
-                            onClick = {
-                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("Copied Text", message.content)
-                                clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, if (isArabic) "تم النسخ" else "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                                showMenu = false
-                            },
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                        )
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(vertical = 4.dp)
+                                .width(220.dp)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(if (isArabic) "نسخ" else "Copy", fontWeight = FontWeight.SemiBold) },
+                                leadingIcon = { Icon(Icons.Outlined.ContentCopy, null, tint = MaterialTheme.colorScheme.onSurface) },
+                                onClick = {
+                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("Copied Text", message.content)
+                                    clipboard.setPrimaryClip(clip)
+                                    Toast.makeText(context, if (isArabic) "تم النسخ" else "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                                    showMenu = false
+                                },
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                            )
 
-                        if (isUser) {
                             DropdownMenuItem(
                                 text = { Text(if (isArabic) "تعديل الرسالة" else "Edit message", fontWeight = FontWeight.SemiBold) },
                                 leadingIcon = { Icon(Icons.Outlined.Edit, null, tint = MaterialTheme.colorScheme.onSurface) },
@@ -1801,15 +1696,102 @@ fun MessageItem(
                     }
                 }
             }
-            
-            if (!isUser && !isLoading) {
-                AiResponseToolbar(
-                    isArabic = isArabic,
-                    content = message.content,
-                    onDelete = onDelete,
-                    onEditClick = { showEditDialog = true },
-                    onShowFeedbackSuccess = onShowFeedbackSuccess
-                )
+        } else {
+            // Model response: Free-flowing, boundless on screen canvas with zero artificial frame or surface clipping
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                horizontalAlignment = Alignment.Start
+            ) {
+                if (isLoading) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TypingAnimation()
+                        if (message.content.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = message.content,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    if (isErrorMsg) {
+                        Row(
+                            verticalAlignment = Alignment.Top,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Info,
+                                contentDescription = "Error",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp).padding(top = 2.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = cleanContent,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedButton(
+                                        onClick = onRetry,
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.primary
+                                        ),
+                                        modifier = Modifier.minimumInteractiveComponentSize()
+                                    ) {
+                                        Icon(Icons.Rounded.Refresh, contentDescription = "Retry", modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(if (isArabic) "إعادة المحاولة" else "Retry")
+                                    }
+
+                                    if (alternativeModel != null) {
+                                        Button(
+                                            onClick = { onRetryWithAlternative(alternativeModel) },
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                            ),
+                                            modifier = Modifier.minimumInteractiveComponentSize()
+                                        ) {
+                                            Icon(Icons.Rounded.SwapHoriz, contentDescription = "Try alternative", modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(if (isArabic) "جرّب مع ${alternativeModel.displayName}" else "Try with ${alternativeModel.displayName}")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Blinking cursor setup for streaming text
+                        val finalContent = if (isStreaming && message.content.isNotEmpty()) {
+                            message.content + " ▌"
+                        } else {
+                            message.content
+                        }
+                        
+                        MarkdownRenderer(text = finalContent)
+                    }
+                }
+
+                if (!isLoading && !isErrorMsg) {
+                    AiResponseToolbar(
+                        isArabic = isArabic,
+                        content = message.content,
+                        onDelete = onDelete,
+                        onEditClick = { showEditDialog = true },
+                        onShowFeedbackSuccess = onShowFeedbackSuccess
+                    )
+                }
             }
         }
     }
