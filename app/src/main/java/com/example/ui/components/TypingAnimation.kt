@@ -41,20 +41,23 @@ fun TypingAnimation(
         }
     }
 
+    val dotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+
     Row(
-        modifier = modifier.padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier
+            .height(24.dp)
+            .padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         dots.forEach { animatable ->
             Box(
                 modifier = Modifier
-                    .size(8.dp)
+                    .size(7.dp)
                     .graphicsLayer {
-                        translationY = -animatable.value * 10.dp.toPx()
+                        translationY = -animatable.value * 6.dp.toPx()
                     }
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
+                    .background(dotColor, CircleShape)
             )
         }
     }

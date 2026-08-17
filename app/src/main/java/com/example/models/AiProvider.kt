@@ -16,13 +16,13 @@ import kotlinx.coroutines.tasks.await
 suspend fun getCurrentGeminiModelName(): String {
     return try {
         val remoteConfig = Firebase.remoteConfig
-        remoteConfig.setDefaultsAsync(mapOf("gemini_model_name" to "gemini-2.5-flash"))
+        remoteConfig.setDefaultsAsync(mapOf("gemini_model_name" to "gemini-3.7-flash"))
         remoteConfig.fetchAndActivate().await()
         val fetched = remoteConfig.getString("gemini_model_name")
-        if (fetched.isNotBlank() && fetched != "gemini-3.6-flash") fetched else "gemini-2.5-flash"
+        if (fetched.isNotBlank() && fetched != "gemini-3.6-flash") fetched else "gemini-3.7-flash"
     } catch (e: Exception) {
-        android.util.Log.e("RemoteConfig", "Fetch failed, using default gemini-2.5-flash", e)
-        "gemini-2.5-flash"
+        android.util.Log.e("RemoteConfig", "Fetch failed, using default gemini-3.7-flash", e)
+        "gemini-3.7-flash"
     }
 }
 
@@ -249,10 +249,10 @@ object AiRouter {
         val defaultRemoteModel = getCurrentGeminiModelName()
         val modelsToTry = linkedSetOf(
             defaultRemoteModel,
+            "gemini-3.7-flash",
             "gemini-2.5-flash",
             "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-2.5-pro"
+            "gemini-1.5-flash"
         ).toList()
 
         var success = false

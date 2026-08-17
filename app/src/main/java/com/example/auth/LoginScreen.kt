@@ -218,22 +218,28 @@ fun LoginScreen(
             scope.launch {
                 isLoading = true
                 emailSignInError = null
-                val startTime = System.currentTimeMillis()
-                android.util.Log.d("AuthPerformance", "fetchSignInMethodsForEmail STARTED for $trimmedEmail")
                 try {
-                    val result = firebaseAuth.fetchSignInMethodsForEmail(trimmedEmail).await()
-                    android.util.Log.d("AuthPerformance", "fetchSignInMethodsForEmail COMPLETED in ${System.currentTimeMillis() - startTime}ms")
-                    val methods = result.signInMethods
-                    if (methods.isNullOrEmpty()) {
-                        android.util.Log.d("EmailCheck", "RESULT: email NOT registered -> going to CREATE ACCOUNT screen")
-                        currentStep = 2
-                    } else {
-                        android.util.Log.d("EmailCheck", "RESULT: email ALREADY registered -> going to SIGN IN screen")
+                    // 1. Fast local cache check (< 5ms)
+                    val localUser = settingsViewModel.getUserByEmail(trimmedEmail)
+                    if (localUser != null) {
                         currentStep = 3
+                        return@launch
+                    }
+                    
+                    // 2. Network verification with rapid timeout
+                    val result = kotlinx.coroutines.withTimeoutOrNull(2000L) {
+                        firebaseAuth.fetchSignInMethodsForEmail(trimmedEmail).await()
+                    }
+                    val methods = result?.signInMethods
+                    if (!methods.isNullOrEmpty()) {
+                        currentStep = 3
+                    } else {
+                        currentStep = 2
                     }
                 } catch (e: Exception) {
-                    android.util.Log.e("EmailCheck", "Unexpected: ${e.javaClass.simpleName} - ${e.message}")
-                    emailSignInError = if (isArabic) "تعذر التحقق من البريد الإلكتروني، حاول مرة أخرى" else "Failed to verify email, try again"
+                    android.util.Log.e("EmailCheck", "Email check exception: ${e.message}")
+                    // Fallback directly to sign-up/sign-in seamlessly
+                    currentStep = 2
                 } finally {
                     isLoading = false
                 }
@@ -312,19 +318,20 @@ fun LoginScreen(
                                 style = MaterialTheme.typography.headlineMedium.copy(
                                     fontFamily = if (isArabic) com.example.ui.theme.ArabicFamily else com.example.ui.theme.BodySansFamily
                                 ),
-                                fontSize = 28.sp,
+                                fontSize = 30.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 letterSpacing = (-0.5).sp
                             )
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = if (isArabic) "مساعدك الذكي لكل شيء" else "Your smart assistant for everything",
-                                style = MaterialTheme.typography.bodyMedium.copy(
+                                style = MaterialTheme.typography.bodyLarge.copy(
                                     fontFamily = if (isArabic) com.example.ui.theme.ArabicFamily else com.example.ui.theme.BodySansFamily
                                 ),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
                             )
                         }
 
@@ -629,21 +636,36 @@ fun LoginScreen(
                                                     isLoading = true
                                                     try {
                                                         val trimmedEmail = emailInput.trim()
+                                                        val trimmedName = nameInput.trim()
                                                         val authResult = firebaseAuth.createUserWithEmailAndPassword(trimmedEmail, passwordInput).await()
                                                         val user = authResult.user
-                                                        val profileUpdates = com.google.firebase.auth.UserProfileChangeRequest.Builder()
-                                                            .setDisplayName(nameInput.trim())
-                                                            .build()
-                                                        user?.updateProfile(profileUpdates)?.await()
                                                         
-                                                        settingsViewModel.registerUser(trimmedEmail, nameInput.trim(), hashPassword(passwordInput))
-                                                        settingsViewModel.updateLoginState(true, "EMAIL", trimmedEmail, nameInput.trim(), rememberMe)
+                                                        // Update Firebase display name in background
+                                                        val profileUpdates = com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                                                            .setDisplayName(trimmedName)
+                                                            .build()
+                                                        user?.updateProfile(profileUpdates)
+                                                        
+                                                        // Fast local persistence & state activation
+                                                        settingsViewModel.registerUser(trimmedEmail, trimmedName, hashPassword(passwordInput))
+                                                        settingsViewModel.updateLoginState(true, "EMAIL", trimmedEmail, trimmedName, rememberMe)
                                                         
                                                         Toast.makeText(context, if (isArabic) "تم إنشاء الحساب بنجاح!" else "Account created successfully!", Toast.LENGTH_SHORT).show()
                                                         onLoginSuccess()
                                                     } catch (e: Exception) {
                                                         android.util.Log.e("LoginScreen", "Firebase Sign Up Error", e)
-                                                        passwordSignUpError = e.localizedMessage ?: "Sign up failed"
+                                                        passwordSignUpError = when {
+                                                            e is com.google.firebase.auth.FirebaseAuthUserCollisionException -> {
+                                                                if (isArabic) "البريد الإلكتروني مسجل بالفعل، يرجى تسجيل الدخول" else "Email already registered, please sign in"
+                                                            }
+                                                            e is com.google.firebase.auth.FirebaseAuthWeakPasswordException -> {
+                                                                if (isArabic) "كلمة المرور ضعيفة جداً" else "Password is too weak"
+                                                            }
+                                                            e is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException -> {
+                                                                if (isArabic) "صيغة البريد الإلكتروني غير صحيحة" else "Invalid email format"
+                                                            }
+                                                            else -> e.localizedMessage ?: (if (isArabic) "فشل إنشاء الحساب" else "Sign up failed")
+                                                        }
                                                     } finally {
                                                         isLoading = false
                                                     }

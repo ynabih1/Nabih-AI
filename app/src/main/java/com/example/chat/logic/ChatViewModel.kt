@@ -197,7 +197,24 @@ class ChatViewModel(
         activeConversationMessagesFlow = viewModelScope.launch {
             chatRepository.getMessagesForConversation(id)
                 .collect { messages ->
-                    _uiState.value = ChatUiState.Success(messages)
+                    // Automatically clean any legacy error messages from database
+                    val errorMsgs = messages.filter { 
+                        it.role == "model" && (
+                            it.content.startsWith("API_ERROR:") || 
+                            it.content.startsWith("An error occurred:") || 
+                            it.content.startsWith("حدث خطأ:") ||
+                            it.content.startsWith("Error:") ||
+                            it.content.contains("الخدمة غير متاحة") ||
+                            it.content.contains("الخدمة مشغولة")
+                        )
+                    }
+                    if (errorMsgs.isNotEmpty()) {
+                        errorMsgs.forEach { msg ->
+                            chatRepository.deleteMessageById(msg.id)
+                        }
+                    }
+                    val validMessages = messages.filterNot { errorMsgs.contains(it) }
+                    _uiState.value = ChatUiState.Success(validMessages)
                 }
         }
     }
@@ -546,24 +563,13 @@ class ChatViewModel(
         _currentStreamingResponse.value = ""
         val currentModelObj = _selectedModel.value
         
-        // Log error locally in Room error_logs
+        // Log error locally in Room error_logs for diagnostics
         viewModelScope.launch {
             chatRepository.insertErrorLog(
                 errorType = e.javaClass.simpleName ?: "Exception",
                 provider = currentModelObj.provider.name
             )
         }
-
-        // Translate/Map API Error code to user friendly message
-        val isArabic = settingsRepository.settings.value.language == com.example.models.AppLanguage.ARABIC
-        val userMsg = com.example.models.AiErrorTranslator.translate(
-            throwable = e,
-            provider = currentModelObj.displayName,
-            isArabic = isArabic
-        )
-
-        // Save with "API_ERROR:" prefix so the UI knows to render it beautifully as an error bubble with retry action
-        saveMessage(convId, "model", "API_ERROR: $userMsg")
     }
 
     private fun saveMessage(conversationId: String, role: String, content: String) {

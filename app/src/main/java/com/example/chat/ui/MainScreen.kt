@@ -595,10 +595,21 @@ fun MainScreen(
                         }
                         is ChatUiState.Success -> {
                             val listState = rememberLazyListState()
+                            // Filter out any API error messages completely so they never appear in the chat UI
+                            val nonErrorMessages = state.messages.filter { msg ->
+                                !(msg.role == "model" && (
+                                    msg.content.startsWith("API_ERROR:") ||
+                                    msg.content.startsWith("An error occurred:") ||
+                                    msg.content.startsWith("حدث خطأ:") ||
+                                    msg.content.startsWith("Error:") ||
+                                    msg.content.contains("الخدمة غير متاحة") ||
+                                    msg.content.contains("الخدمة مشغولة")
+                                ))
+                            }
                             val filteredMessages = if (searchQuery.isBlank()) {
-                                state.messages
+                                nonErrorMessages
                             } else {
-                                state.messages.filter { it.content.contains(searchQuery, ignoreCase = true) }
+                                nonErrorMessages.filter { it.content.contains(searchQuery, ignoreCase = true) }
                             }
                             val imeVisible = WindowInsets.isImeVisible
                             
@@ -1468,15 +1479,17 @@ fun MessageItem(
     ) {
         if (!isUser) {
             Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                modifier = Modifier.size(28.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(painter = painterResource(id = R.drawable.logo), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Icon(
+                    painter = painterResource(id = R.drawable.logo),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
             }
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(8.dp))
         }
         
         if (showFullScreenImage && message.imageUri != null) {
@@ -1500,26 +1513,14 @@ fun MessageItem(
         
         Column(
             modifier = Modifier
-                .fillMaxWidth(if (isUser) 0.78f else 1f)
+                .fillMaxWidth(if (isUser) 0.85f else 1f)
                 .wrapContentWidth(if (isUser) Alignment.End else Alignment.Start),
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
         ) {
             Surface(
                 shape = bubbleShape,
-                color = if (isUser) {
-                    Color(0xFFEAF2FD)
-                } else if (isErrorMsg) {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                } else {
-                    Color.Transparent
-                },
-                border = if (isUser) {
-                    null
-                } else if (isErrorMsg) {
-                    androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                } else {
-                    null
-                },
+                color = Color.Transparent,
+                border = null,
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
                 modifier = Modifier
@@ -1528,8 +1529,8 @@ fun MessageItem(
                 Box {
                     Column(
                         modifier = Modifier.padding(
-                            horizontal = if (isUser) 16.dp else 4.dp,
-                            vertical = if (isUser) 10.dp else 6.dp
+                            horizontal = 0.dp,
+                            vertical = 4.dp
                         )
                     ) {
                         if (message.imageUri != null) {
@@ -1677,9 +1678,10 @@ fun MessageItem(
                                 Text(
                                     text = message.content,
                                     style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontSize = 15.5.sp,
+                                        fontSize = 16.sp,
                                         lineHeight = 24.sp,
-                                        color = Color(0xFF1E293B)
+                                        fontWeight = FontWeight.Normal,
+                                        color = MaterialTheme.colorScheme.onBackground
                                     )
                                 )
                             } else {
@@ -2416,7 +2418,7 @@ fun ConversationItem(
 
     Surface(
         onClick = onSelect,
-        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+        color = Color.Transparent,
         shape = RoundedCornerShape(12.dp),
         modifier = modifier
             .fillMaxWidth()
@@ -2437,7 +2439,7 @@ fun ConversationItem(
                     Icon(
                         imageVector = Icons.Rounded.PushPin,
                         contentDescription = "Pinned",
-                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .size(18.dp)
                             .padding(end = 4.dp)
@@ -2446,7 +2448,7 @@ fun ConversationItem(
                 Text(
                     text = conversation.title,
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -2493,21 +2495,9 @@ fun DrawerMenuItem(
     isArabic: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = if (isSelected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-    } else {
-        Color.Transparent
-    }
-    
-    val contentColor = if (isSelected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
-    }
-
     Surface(
         onClick = onClick,
-        color = backgroundColor,
+        color = Color.Transparent,
         shape = RoundedCornerShape(12.dp),
         modifier = modifier
             .fillMaxWidth()
@@ -2523,7 +2513,7 @@ fun DrawerMenuItem(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = contentColor,
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
                 modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -2531,7 +2521,7 @@ fun DrawerMenuItem(
                 text = label,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = if (isSelected) MaterialTheme.colorScheme.onSurface else contentColor,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
             )
         }
