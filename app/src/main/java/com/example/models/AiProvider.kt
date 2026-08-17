@@ -13,7 +13,7 @@ import com.google.firebase.Firebase
 import com.google.firebase.remoteconfig.remoteConfig
 import kotlinx.coroutines.tasks.await
 
-private var cachedGeminiModelName: String = "gemini-3.7-flash"
+private var cachedGeminiModelName: String = "gemini-2.0-flash"
 
 fun getCurrentGeminiModelName(): String {
     return cachedGeminiModelName
@@ -22,10 +22,10 @@ fun getCurrentGeminiModelName(): String {
 fun initRemoteConfigAsync() {
     try {
         val remoteConfig = Firebase.remoteConfig
-        remoteConfig.setDefaultsAsync(mapOf("gemini_model_name" to "gemini-3.7-flash"))
+        remoteConfig.setDefaultsAsync(mapOf("gemini_model_name" to "gemini-2.0-flash"))
         remoteConfig.fetchAndActivate().addOnSuccessListener {
             val fetched = remoteConfig.getString("gemini_model_name")
-            if (fetched.isNotBlank() && fetched != "gemini-3.6-flash") {
+            if (fetched.isNotBlank()) {
                 cachedGeminiModelName = fetched
             }
         }
@@ -257,10 +257,11 @@ object AiRouter {
         val defaultRemoteModel = getCurrentGeminiModelName()
         val modelsToTry = linkedSetOf(
             defaultRemoteModel,
-            "gemini-3.7-flash",
-            "gemini-2.5-flash",
             "gemini-2.0-flash",
-            "gemini-1.5-flash"
+            "gemini-2.5-flash",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
+            "gemini-3.7-flash"
         ).toList()
 
         var success = false
@@ -308,14 +309,15 @@ object AiRouter {
 
                     val isRateLimit = (e is HttpException && e.code() == 429) || (e.message?.contains("429") == true)
                     val isAuthError = e is HttpException && (e.code() == 401 || e.code() == 403)
+                    val isNotFound = (e is HttpException && e.code() == 404) || (e.message?.contains("404") == true)
 
-                    if (isAuthError) {
+                    if (isAuthError || isNotFound) {
                         break
                     }
 
                     currentTry++
                     if (currentTry < maxRetries) {
-                        val delayTime = if (isRateLimit) 1500L * currentTry else 800L * currentTry
+                        val delayTime = if (isRateLimit) 1500L * currentTry else 600L * currentTry
                         kotlinx.coroutines.delay(delayTime)
                     }
                 }

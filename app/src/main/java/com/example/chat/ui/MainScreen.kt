@@ -33,6 +33,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -2182,7 +2183,7 @@ fun BottomInputArea(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 16.dp, bottom = 4.dp),
+                        .padding(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 2.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     if (text.isEmpty()) {
@@ -2192,19 +2193,15 @@ fun BottomInputArea(
                             } else {
                                 if (isArabic) "الرد على Nabih AI..." else "Reply to Nabih AI..."
                             },
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                     androidx.compose.foundation.text.BasicTextField(
                         value = text,
                         onValueChange = onTextChange,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                         cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                         maxLines = 8,
@@ -2216,7 +2213,7 @@ fun BottomInputArea(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 8.dp, end = 8.dp, bottom = 8.dp, top = 8.dp),
+                        .padding(start = 14.dp, end = 14.dp, bottom = 10.dp, top = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Attachment Button with Custom popup anchoring
@@ -2328,14 +2325,14 @@ fun BottomInputArea(
                     val hasContent = text.isNotBlank() || attachedImageUri != null || attachedDocUri != null
                     val isSendEnabled = (hasContent && isOnline) || isGenerating
                     val buttonColor = when {
-                        isGenerating -> MaterialTheme.colorScheme.primary
-                        hasContent && isOnline -> MaterialTheme.colorScheme.primary
+                        isGenerating -> MaterialTheme.colorScheme.onSurface
+                        hasContent && isOnline -> MaterialTheme.colorScheme.onSurface
                         else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                     }
                     val iconColor = when {
-                        isGenerating -> MaterialTheme.colorScheme.onPrimary
-                        hasContent && isOnline -> MaterialTheme.colorScheme.onPrimary
-                        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        isGenerating -> MaterialTheme.colorScheme.surface
+                        hasContent && isOnline -> MaterialTheme.colorScheme.surface
+                        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f)
                     }
 
                     Box(
@@ -2355,28 +2352,22 @@ fun BottomInputArea(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                            if (isGenerating) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(22.dp),
-                                        color = iconColor,
-                                        strokeWidth = 2.dp
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .size(9.dp)
-                                            .background(iconColor, RoundedCornerShape(2.dp))
-                                    )
-                                }
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Rounded.ArrowUpward,
-                                    contentDescription = "Send",
-                                    tint = iconColor,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                        if (isGenerating) {
+                            Box(
+                                modifier = Modifier
+                                    .size(11.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(iconColor)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.ArrowUpward,
+                                contentDescription = "Send",
+                                tint = iconColor,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
+                    }
                     }
                 }
             }
@@ -2598,6 +2589,12 @@ fun MainDrawerContent(
                     .padding(top = 32.dp, bottom = 24.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Image(
+                    painter = painterResource(id = R.drawable.logo),
+                    contentDescription = "Nabih AI Logo",
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = "Nabih AI",
                     fontSize = 20.sp,

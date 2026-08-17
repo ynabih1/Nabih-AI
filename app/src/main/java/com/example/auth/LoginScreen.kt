@@ -1,94 +1,281 @@
 package com.example.auth
 
-import com.example.R
-import androidx.compose.foundation.border
-import com.example.models.AppLanguage
-import com.example.settings.profile.SettingsViewModel
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material.icons.automirrored.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.R
+import com.example.models.AppLanguage
+import com.example.settings.profile.SettingsViewModel
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
-import com.google.firebase.auth.FirebaseAuthInvalidUserException
-import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.common.api.ApiException
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import com.google.firebase.auth.UserProfileChangeRequest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
-
-enum class PasswordStrength(val labelEn: String, val labelAr: String, val color: Color, val progress: Float) {
-    EMPTY("Empty", "فارغة", Color.Transparent, 0f),
-    WEAK("Weak", "ضعيفة", Color(0xFFE53935), 0.25f),
-    MEDIUM("Medium", "متوسطة", Color(0xFFFFB300), 0.6f),
-    STRONG("Strong", "قوية", Color(0xFF2563EB), 1.0f)
-}
-
-fun calculatePasswordStrength(password: String): PasswordStrength {
-    if (password.isEmpty()) return PasswordStrength.EMPTY
-    if (password.length < 6) return PasswordStrength.WEAK
-    
-    var score = 0
-    if (password.length >= 8) score++
-    if (password.any { it.isUpperCase() } && password.any { it.isLowerCase() }) score++
-    if (password.any { it.isDigit() }) score++
-    if (password.any { !it.isLetterOrDigit() }) score++
-    
-    return when {
-        score >= 3 -> PasswordStrength.STRONG
-        score >= 1 -> PasswordStrength.MEDIUM
-        else -> PasswordStrength.WEAK
-    }
-}
+import kotlin.math.cos
+import kotlin.math.sin
 
 fun hashPassword(password: String): String {
     val digest = MessageDigest.getInstance("SHA-256")
     val hashBytes = digest.digest(password.toByteArray(Charsets.UTF_8))
     return hashBytes.fold("") { str, it -> str + "%02x".format(it) }
+}
+
+/**
+ * Elevated editorial art representation of the official Nabih AI app icon:
+ * Interconnected neural constellation, luminous chat intelligence node, and glowing orbital rings.
+ */
+@Composable
+fun NabihArtIllustration(
+    modifier: Modifier = Modifier,
+    isDark: Boolean = false
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "icon_art_anim")
+    
+    // Breathing & pulse cycle
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 6.28318f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulse"
+    )
+
+    // Orbital rotation
+    val rotationAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(20000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rotation"
+    )
+
+    val primaryBrandColor = Color(0xFF2563EB) // Nabih Royal Blue
+    val secondaryBrandColor = Color(0xFF38BDF8) // Luminous Cyan / Sky Blue
+    val deepBlueColor = Color(0xFF1D4ED8) // Deep Blue Accent
+    val lightBlueColor = Color(0xFF60A5FA) // Light Blue Glow
+    val glowColor = if (isDark) Color(0xFF1E40AF).copy(alpha = 0.25f) else Color(0xFF3B82F6).copy(alpha = 0.18f)
+    val ringColor = if (isDark) Color(0xFF1E3A8A).copy(alpha = 0.45f) else Color(0xFF93C5FD).copy(alpha = 0.5f)
+
+    Canvas(modifier = modifier.size(190.dp, 160.dp)) {
+        val w = size.width
+        val h = size.height
+        val cx = w / 2f
+        val cy = h / 2f
+
+        val breath = (sin(pulse) + 1f) / 2f // 0..1
+        val floatOffset = sin(pulse) * 3.5f
+
+        // 1. Ambient Background Glow Halo (All Blue)
+        drawCircle(
+            color = glowColor,
+            radius = (w * 0.42f) + (breath * 10f),
+            center = Offset(cx, cy + floatOffset)
+        )
+
+        // 2. Elegant Dashed Orbital Guide Ring (Blue Accent)
+        drawCircle(
+            color = ringColor,
+            radius = w * 0.40f,
+            center = Offset(cx, cy + floatOffset),
+            style = Stroke(
+                width = 2f,
+                pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(12f, 16f), pulse * 8f)
+            )
+        )
+
+        // 3. Floating Orbital Micro-Sparks (Pure Blue shades)
+        val starRadius = w * 0.44f
+        val starAngleRad = Math.toRadians(rotationAngle.toDouble())
+        val s1x = cx + (starRadius * cos(starAngleRad)).toFloat()
+        val s1y = cy + floatOffset + (starRadius * sin(starAngleRad)).toFloat()
+        val s2x = cx - (starRadius * cos(starAngleRad)).toFloat()
+        val s2y = cy + floatOffset - (starRadius * sin(starAngleRad)).toFloat()
+
+        drawCircle(lightBlueColor, radius = 3.5f + (breath * 1.5f), center = Offset(s1x, s1y))
+        drawCircle(secondaryBrandColor, radius = 3.0f, center = Offset(s2x, s2y))
+
+        // Small stationary decorative star at top right (Blue)
+        drawCircle(secondaryBrandColor, radius = 4f, center = Offset(w * 0.82f, h * 0.18f + floatOffset))
+
+        // 4. Transform Matrix for the Canonical Nabih AI App Logo Icon
+        // Based on 200x200 viewport of @drawable/logo
+        val scale = (w * 0.58f) / 200f
+        val originX = cx - (100f * scale)
+        val originY = (cy + floatOffset) - (105f * scale)
+
+        fun mapPoint(x: Float, y: Float): Offset {
+            return Offset(originX + (x * scale), originY + (y * scale))
+        }
+
+        // Connection Paths matching logo.xml
+        val conn1 = Path().apply {
+            val p1 = mapPoint(65f, 65f)
+            val p2 = mapPoint(140f, 60f)
+            val c1 = mapPoint(100f, 65f)
+            val c2 = mapPoint(140f, 30f)
+            moveTo(p1.x, p1.y)
+            cubicTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y)
+        }
+
+        val conn2 = Path().apply {
+            val p1 = mapPoint(65f, 65f)
+            val p2 = mapPoint(100f, 160f)
+            val c1 = mapPoint(50f, 100f)
+            val c2 = mapPoint(100f, 130f)
+            moveTo(p1.x, p1.y)
+            cubicTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y)
+        }
+
+        val conn3 = Path().apply {
+            val p1 = mapPoint(100f, 160f)
+            val p2 = mapPoint(150f, 130f)
+            val c1 = mapPoint(130f, 160f)
+            val c2 = mapPoint(140f, 120f)
+            moveTo(p1.x, p1.y)
+            cubicTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y)
+        }
+
+        val strokeWidthVal = 24f * scale
+
+        // Draw dynamic connectors (Blue)
+        drawPath(
+            path = conn1,
+            color = primaryBrandColor,
+            style = Stroke(width = strokeWidthVal, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+        drawPath(
+            path = conn2,
+            color = primaryBrandColor,
+            style = Stroke(width = strokeWidthVal, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+        drawPath(
+            path = conn3,
+            color = primaryBrandColor,
+            style = Stroke(width = strokeWidthVal, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+
+        // Draw the 4 Nodes (All Blue):
+        // Top-Left Master Node (r = 40)
+        val pTopLeft = mapPoint(65f, 65f)
+        drawCircle(
+            color = primaryBrandColor,
+            radius = 40f * scale,
+            center = pTopLeft
+        )
+        // Inner highlight core (Cyan Blue)
+        drawCircle(
+            color = secondaryBrandColor,
+            radius = 16f * scale,
+            center = pTopLeft
+        )
+
+        // Top-Right Node (r = 25)
+        val pTopRight = mapPoint(140f, 60f)
+        drawCircle(
+            color = primaryBrandColor,
+            radius = 25f * scale,
+            center = pTopRight
+        )
+        drawCircle(
+            color = lightBlueColor,
+            radius = 10f * scale,
+            center = pTopRight
+        )
+
+        // Bottom-Center Node (r = 25)
+        val pBottomCenter = mapPoint(100f, 160f)
+        drawCircle(
+            color = primaryBrandColor,
+            radius = 25f * scale,
+            center = pBottomCenter
+        )
+        drawCircle(
+            color = deepBlueColor,
+            radius = 11f * scale,
+            center = pBottomCenter
+        )
+
+        // Bottom-Right Chat Bubble Node (r = 40)
+        val pChat = mapPoint(150f, 130f)
+        drawCircle(
+            color = primaryBrandColor,
+            radius = 40f * scale,
+            center = pChat
+        )
+
+        // Chat Bubble Tail matching logo.xml (M 130 160 L 130 190 L 155 168 Z)
+        val tailPath = Path().apply {
+            val t1 = mapPoint(130f, 160f)
+            val t2 = mapPoint(130f, 190f)
+            val t3 = mapPoint(155f, 168f)
+            moveTo(t1.x, t1.y)
+            lineTo(t2.x, t2.y)
+            lineTo(t3.x, t3.y)
+            close()
+        }
+        drawPath(path = tailPath, color = primaryBrandColor)
+
+        // Inner chat core (Luminous Cyan Blue)
+        drawCircle(
+            color = secondaryBrandColor,
+            radius = 16f * scale,
+            center = pChat
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -103,32 +290,31 @@ fun LoginScreen(
     val scope = rememberCoroutineScope()
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
     val isArabic = settings.language == AppLanguage.ARABIC
+    val isDark = isSystemInDarkTheme()
 
-    // Login screen states: 
-    // 1: Sign In Form, 2: Sign Up Form, 3: Forgot Password, 4: Verification & Reset
+    // Palette inspired by Claude warm minimalism
+    val canvasBg = if (isDark) Color(0xFF141312) else Color(0xFFFAF7F2)
+    val textPrimary = if (isDark) Color(0xFFF4EFE6) else Color(0xFF1D1B19)
+    val textSecondary = if (isDark) Color(0xFFA29C91) else Color(0xFF756F64)
+    val dividerColor = if (isDark) Color(0xFF38342F) else Color(0xFFDFD9CE)
+    val inputBorderColor = if (isDark) Color(0xFF3F3B35) else Color(0xFFD6CFC3)
+    val inputBgColor = if (isDark) Color(0xFF1F1E1B) else Color(0xFFFFFFFF)
+    val primaryButtonBg = if (isDark) Color(0xFFEDE8DF) else Color(0xFF191816)
+    val primaryButtonText = if (isDark) Color(0xFF191816) else Color(0xFFFAF7F2)
+
+    // 1: Step 1 Email Form, 2: Sign Up, 3: Password Sign In, 4: Forgot Password
     var currentStep by remember { mutableStateOf(1) }
-    
-    // Inputs
+
     var emailInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
     var nameInput by remember { mutableStateOf("") }
-    
-    // Remember Me
     var rememberMe by remember { mutableStateOf(true) }
-    
-    // Forgot password states
     var forgotEmailInput by remember { mutableStateOf("") }
-    var generatedResetCode by remember { mutableStateOf("") }
-    var verificationCodeInput by remember { mutableStateOf("") }
-    var newPasswordInput by remember { mutableStateOf("") }
-    var confirmNewPasswordInput by remember { mutableStateOf("") }
-    
-    // Security / Visibility
-    var passwordVisible by remember { mutableStateOf(false) }
-    var newPasswordVisible by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
 
-    // FirebaseAuth Instance
+    var passwordVisible by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+    var resetEmailSent by remember { mutableStateOf(false) }
+
     val firebaseAuth = remember { FirebaseAuth.getInstance() }
     val webClientId = remember(context) {
         try {
@@ -149,27 +335,23 @@ fun LoginScreen(
             if (idToken != null) {
                 scope.launch {
                     isLoading = true
-                    val startTime = System.currentTimeMillis()
-                    android.util.Log.d("AuthPerformance", "Google Auth signInWithCredential STARTED")
                     try {
                         val credential = GoogleAuthProvider.getCredential(idToken, null)
                         val authResult = firebaseAuth.signInWithCredential(credential).await()
-                        android.util.Log.d("AuthPerformance", "Google Auth COMPLETED in ${System.currentTimeMillis() - startTime}ms")
                         val firebaseUser = authResult.user
                         val email = firebaseUser?.email ?: ""
                         val displayName = firebaseUser?.displayName ?: "Google User"
-                        
-                        // Also ensure registered in local Room db to keep compat with chat/settings
+
                         val localUser = settingsViewModel.getUserByEmail(email)
                         if (localUser == null) {
                             settingsViewModel.registerUser(email, displayName, "google_auth")
                         }
-                        
+
                         settingsViewModel.updateLoginState(true, "GOOGLE", email, displayName, true)
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         Toast.makeText(context, if (isArabic) "مرحباً بك $displayName" else "Welcome, $displayName!", Toast.LENGTH_SHORT).show()
                         onLoginSuccess()
                     } catch (e: Exception) {
-                        android.util.Log.e("LoginScreen", "Firebase Google Auth Error", e)
                         val msg = e.localizedMessage ?: (if (isArabic) "فشل تسجيل الدخول عبر Google" else "Google login failed")
                         Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                     } finally {
@@ -180,53 +362,47 @@ fun LoginScreen(
                 Toast.makeText(context, if (isArabic) "فشل الحصول على رمز تعريف Google" else "Failed to get Google ID Token", Toast.LENGTH_SHORT).show()
             }
         } catch (e: ApiException) {
-            android.util.Log.e("LoginScreen", "Google Sign In Error status: ${e.statusCode}", e)
             val msg = when (e.statusCode) {
                 com.google.android.gms.common.api.CommonStatusCodes.NETWORK_ERROR, 7 -> {
-                    if (isArabic) "تعذر الاتصال بجوجل، تحقق من اتصالك بالإنترنت وحاول مرة أخرى"
-                    else "Unable to connect to Google. Check your internet connection and try again."
-                }
-                com.google.android.gms.common.api.CommonStatusCodes.DEVELOPER_ERROR, 10 -> {
-                    android.util.Log.e("GoogleSignIn", "Developer error - check SHA-1/Client ID configuration")
-                    if (isArabic) "حدثت مشكلة في الإعداد، يرجى المحاولة لاحقاً"
-                    else "Login configuration issue, please try again later"
+                    if (isArabic) "تعذر الاتصال بجوجل، تحقق من اتصالك بالإنترنت" else "Unable to connect to Google. Check internet connection."
                 }
                 com.google.android.gms.common.api.CommonStatusCodes.CANCELED, 12501 -> null
-                else -> {
-                    if (isArabic) "تعذر تسجيل الدخول عبر جوجل، حاول مرة أخرى (${e.statusCode})"
-                    else "Google Sign-In failed (${e.statusCode})"
-                }
+                else -> if (isArabic) "فشل تسجيل الدخول عبر جوجل" else "Google Sign-In failed"
             }
-            if (msg != null) {
-                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-            }
+            if (msg != null) Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         }
     }
 
-    // local error states for Sign Up Form
     var nameSignUpError by remember { mutableStateOf<String?>(null) }
-    var emailSignUpError by remember { mutableStateOf<String?>(null) }
-    var passwordSignUpError by remember { mutableStateOf<String?>(null) }
-
-    // local error states for Sign In Form
     var emailSignInError by remember { mutableStateOf<String?>(null) }
+    var passwordSignUpError by remember { mutableStateOf<String?>(null) }
     var passwordSignInError by remember { mutableStateOf<String?>(null) }
+    var forgotPasswordError by remember { mutableStateOf<String?>(null) }
+
+    var isEmailSignInFocused by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentStep) {
+        nameSignUpError = null
+        emailSignInError = null
+        passwordSignUpError = null
+        passwordSignInError = null
+        forgotPasswordError = null
+        resetEmailSent = false
+    }
 
     val verifyEmailAndNavigate = { email: String ->
         val trimmedEmail = email.trim()
         if (!isLoading) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             scope.launch {
                 isLoading = true
                 emailSignInError = null
                 try {
-                    // 1. Fast local cache check (< 5ms)
                     val localUser = settingsViewModel.getUserByEmail(trimmedEmail)
                     if (localUser != null) {
                         currentStep = 3
                         return@launch
                     }
-                    
-                    // 2. Network verification with rapid timeout
                     val result = kotlinx.coroutines.withTimeoutOrNull(2000L) {
                         firebaseAuth.fetchSignInMethodsForEmail(trimmedEmail).await()
                     }
@@ -237,8 +413,6 @@ fun LoginScreen(
                         currentStep = 2
                     }
                 } catch (e: Exception) {
-                    android.util.Log.e("EmailCheck", "Email check exception: ${e.message}")
-                    // Fallback directly to sign-up/sign-in seamlessly
                     currentStep = 2
                 } finally {
                     isLoading = false
@@ -247,36 +421,11 @@ fun LoginScreen(
         }
     }
 
-    // Focus states for SignUp Form
-    var isPasswordSignUpFocused by remember { mutableStateOf(false) }
-    var isNameSignUpFocused by remember { mutableStateOf(false) }
-    var isEmailSignUpFocused by remember { mutableStateOf(false) }
-
-    // Focus states for SignIn Form
-    var isEmailSignInFocused by remember { mutableStateOf(false) }
-    var isPasswordSignInFocused by remember { mutableStateOf(false) }
-
-    // Reset validation errors when currentStep changes
-    LaunchedEffect(currentStep) {
-        nameSignUpError = null
-        emailSignUpError = null
-        passwordSignUpError = null
-        emailSignInError = null
-        passwordSignInError = null
-    }
-
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(canvasBg)
     ) {
-        // Decorative background elements
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-        )
-
         CompositionLocalProvider(LocalLayoutDirection provides (if (isArabic) LayoutDirection.Rtl else LayoutDirection.Ltr)) {
             BoxWithConstraints(
                 modifier = Modifier
@@ -286,640 +435,649 @@ fun LoginScreen(
                     .imePadding()
             ) {
                 val screenHeight = maxHeight
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 24.dp),
+                        .padding(horizontal = 28.dp, vertical = 20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = screenHeight),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .widthIn(max = 440.dp)
+                            .heightIn(min = screenHeight - 40.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Spacer(modifier = Modifier.weight(1f))
-                        
-                        // Header: App Logo & Name (Visual padding adjusted)
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
+                        // 1. Top Nabih AI Branding with official App Icon
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
                             modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp)
                         ) {
-                            Icon(
+                            Image(
                                 painter = painterResource(id = R.drawable.logo),
-                                contentDescription = null,
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(72.dp)
+                                contentDescription = "Nabih AI App Icon",
+                                modifier = Modifier.size(32.dp)
                             )
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Nabih AI",
-                                style = MaterialTheme.typography.headlineMedium.copy(
-                                    fontFamily = if (isArabic) com.example.ui.theme.ArabicFamily else com.example.ui.theme.BodySansFamily
-                                ),
-                                fontSize = 30.sp,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontSize = 24.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                letterSpacing = (-0.5).sp
+                                fontFamily = FontFamily.Serif,
+                                color = textPrimary
                             )
                         }
 
-                        // Fixed space between header and interactive group
-                        Spacer(modifier = Modifier.height(32.dp))
-
-                        // Main Interactive Content Area (Card component)
-                        Card(
+                        // 2. Center Hero Art & Editorial Headline
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .widthIn(max = 480.dp),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                } else {
-                                    Color.Transparent
-                                }
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                            border = if (androidx.compose.foundation.isSystemInDarkTheme()) {
-                                BorderStroke(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
-                                )
-                            } else {
-                                null
-                            }
+                                .padding(vertical = 24.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(24.dp),
-                                contentAlignment = Alignment.TopCenter
-                            ) {
-                                AnimatedContent(
-                                    targetState = currentStep,
-                                    transitionSpec = {
-                                        slideInHorizontally { width -> if (targetState > initialState) width else -width } + fadeIn() togetherWith
-                                        slideOutHorizontally { width -> if (targetState > initialState) -width else width } + fadeOut()
-                                    },
-                                    label = "auth_screen_navigation"
-                                ) { step ->
-                                    when (step) {
-                                        1 -> {
-                                            // Main Email Input Screen
-                                            Column(
-                                                verticalArrangement = Arrangement.spacedBy(16.dp),
-                                                modifier = Modifier.fillMaxWidth()
+                            // Powerful hand-drawn neural problem-solving artwork
+                            NabihArtIllustration(
+                                isDark = isDark,
+                                modifier = Modifier.padding(bottom = 24.dp)
+                            )
+
+                            // Editorial Serif Headline matching Claude style
+                            Text(
+                                text = if (isArabic) "مساعدك الذكي لكل شيء" else "Your smart assistant for everything",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontSize = 26.sp,
+                                fontFamily = FontFamily.Serif,
+                                fontWeight = FontWeight.Normal,
+                                color = textPrimary,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 34.sp
+                            )
+                        }
+
+                        // 3. Bottom Auth Flow (Matching Claude layout precisely)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp)
+                        ) {
+                            AnimatedContent(
+                                targetState = currentStep,
+                                transitionSpec = {
+                                    if (targetState > initialState) {
+                                        (slideInHorizontally { it } + fadeIn()).togetherWith(slideOutHorizontally { -it } + fadeOut())
+                                    } else {
+                                        (slideInHorizontally { -it } + fadeIn()).togetherWith(slideOutHorizontally { it } + fadeOut())
+                                    }
+                                },
+                                label = "claude_auth_step_transition"
+                            ) { step ->
+                                when (step) {
+                                    1 -> {
+                                        // STEP 1: Main Landing (Google Button + "OR" Divider + Outlined Email Input)
+                                        Column(
+                                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            // Pill Google Login Button
+                                            Button(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                                                        .requestIdToken(webClientId)
+                                                        .requestEmail()
+                                                        .build()
+                                                    val googleSignInClient = GoogleSignIn.getClient(context, gso)
+                                                    googleSignInClient.signOut()
+                                                    googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(52.dp)
+                                                    .testTag("google_login_button"),
+                                                shape = RoundedCornerShape(26.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = primaryButtonBg,
+                                                    contentColor = primaryButtonText
+                                                ),
+                                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
                                             ) {
-                                                // Google Login Button
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.Center,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text(
+                                                        text = if (isArabic) "المتابعة باستخدام Google" else "Continue with Google",
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        fontSize = 15.sp,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                    Spacer(modifier = Modifier.width(10.dp))
+                                                    Icon(
+                                                        painter = painterResource(id = R.drawable.ic_google),
+                                                        contentDescription = "Google Icon",
+                                                        tint = Color.Unspecified,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            }
+
+                                            // Clean Minimalist OR Divider
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp)
+                                            ) {
+                                                HorizontalDivider(
+                                                    modifier = Modifier.weight(1f),
+                                                    color = dividerColor,
+                                                    thickness = 1.dp
+                                                )
+                                                Text(
+                                                    text = if (isArabic) "أو" else "OR",
+                                                    color = textSecondary,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    modifier = Modifier.padding(horizontal = 14.dp)
+                                                )
+                                                HorizontalDivider(
+                                                    modifier = Modifier.weight(1f),
+                                                    color = dividerColor,
+                                                    thickness = 1.dp
+                                                )
+                                            }
+
+                                            // Rounded Email Input Field
+                                            OutlinedTextField(
+                                                value = emailInput,
+                                                onValueChange = {
+                                                    emailInput = it
+                                                    emailSignInError = null
+                                                },
+                                                placeholder = {
+                                                    Text(
+                                                        text = if (isArabic) "أدخل بريدك الإلكتروني" else "Enter your email",
+                                                        color = textSecondary.copy(alpha = 0.8f),
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontSize = 15.sp
+                                                    )
+                                                },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
+                                                keyboardActions = KeyboardActions(onDone = {
+                                                    if (android.util.Patterns.EMAIL_ADDRESS.matcher(emailInput.trim()).matches()) {
+                                                        verifyEmailAndNavigate(emailInput)
+                                                    }
+                                                }),
+                                                singleLine = true,
+                                                isError = emailSignInError != null,
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedContainerColor = inputBgColor,
+                                                    unfocusedContainerColor = inputBgColor,
+                                                    focusedBorderColor = Color(0xFF2563EB),
+                                                    unfocusedBorderColor = inputBorderColor,
+                                                    focusedTextColor = textPrimary,
+                                                    unfocusedTextColor = textPrimary
+                                                ),
+                                                shape = RoundedCornerShape(26.dp),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(52.dp)
+                                                    .onFocusChanged { isEmailSignInFocused = it.isFocused }
+                                            )
+
+                                            if (emailSignInError != null) {
+                                                Text(
+                                                    text = emailSignInError!!,
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    modifier = Modifier.padding(start = 12.dp)
+                                                )
+                                            }
+
+                                            // Sleek Continue Button when Email is entered
+                                            AnimatedVisibility(
+                                                visible = android.util.Patterns.EMAIL_ADDRESS.matcher(emailInput.trim()).matches(),
+                                                enter = fadeIn() + expandVertically(),
+                                                exit = fadeOut() + shrinkVertically()
+                                            ) {
                                                 Button(
-                                                    onClick = {
-                                                        val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
-                                                            .requestIdToken(webClientId)
-                                                            .requestEmail()
-                                                            .build()
-                                                        val googleSignInClient = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
-                                                        googleSignInClient.signOut()
-                                                        googleSignInLauncher.launch(googleSignInClient.signInIntent)
-                                                    },
+                                                    onClick = { verifyEmailAndNavigate(emailInput) },
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .height(56.dp)
-                                                        .testTag("google_login_button"),
-                                                    shape = RoundedCornerShape(28.dp),
+                                                        .height(52.dp),
+                                                    shape = RoundedCornerShape(26.dp),
                                                     colors = ButtonDefaults.buttonColors(
-                                                        containerColor = Color.White,
-                                                        contentColor = Color.Black
-                                                    ),
-                                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                                    elevation = ButtonDefaults.buttonElevation(
-                                                        defaultElevation = 1.dp,
-                                                        pressedElevation = 2.dp
+                                                        containerColor = Color(0xFF2563EB),
+                                                        contentColor = Color.White
                                                     )
                                                 ) {
-                                                    Row(
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.Center,
-                                                        modifier = Modifier.fillMaxWidth()
-                                                    ) {
-                                                        Icon(
-                                                            painter = painterResource(id = R.drawable.ic_google),
-                                                            contentDescription = "Google Icon",
-                                                            tint = Color.Unspecified,
-                                                            modifier = Modifier.size(24.dp)
+                                                    if (isLoading) {
+                                                        CircularProgressIndicator(
+                                                            modifier = Modifier.size(22.dp),
+                                                            color = Color.White,
+                                                            strokeWidth = 2.dp
                                                         )
-                                                        Spacer(modifier = Modifier.width(12.dp))
+                                                    } else {
                                                         Text(
-                                                            text = if (isArabic) "المتابعة باستخدام Google" else "Continue with Google",
+                                                            text = if (isArabic) "متابعة" else "Continue",
                                                             style = MaterialTheme.typography.titleMedium,
+                                                            fontSize = 15.sp,
                                                             fontWeight = FontWeight.SemiBold
                                                         )
                                                     }
                                                 }
-
-                                                // Divider (high visibility outline, clearer but soft)
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically, 
-                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                                                ) {
-                                                    HorizontalDivider(
-                                                        modifier = Modifier.weight(1f), 
-                                                        color = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.outline else Color(0xFFD1CFC7)
-                                                    )
-                                                    Text(
-                                                        text = if (isArabic) "أو" else "OR",
-                                                        modifier = Modifier.padding(horizontal = 16.dp),
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        style = MaterialTheme.typography.labelLarge
-                                                    )
-                                                    HorizontalDivider(
-                                                        modifier = Modifier.weight(1f), 
-                                                        color = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.outline else Color(0xFFD1CFC7)
-                                                    )
-                                                }
-
-                                                // Email Input (White background, clear BorderSubtle, Primary focus transition)
-                                                OutlinedTextField(
-                                                    value = emailInput,
-                                                    onValueChange = { 
-                                                        emailInput = it 
-                                                        emailSignInError = null 
-                                                    },
-                                                    placeholder = { Text(if (isArabic) "أدخل بريدك الإلكتروني" else "Enter your email") },
-                                                    leadingIcon = {
-                                                        Icon(
-                                                            imageVector = Icons.Rounded.Email,
-                                                            contentDescription = null,
-                                                            tint = if (isEmailSignInFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                                        )
-                                                    },
-                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
-                                                    keyboardActions = KeyboardActions(onDone = { 
-                                                        if (android.util.Patterns.EMAIL_ADDRESS.matcher(emailInput).matches()) {
-                                                            verifyEmailAndNavigate(emailInput)
-                                                        }
-                                                    }),
-                                                    singleLine = true,
-                                                    isError = emailSignInError != null,
-                                                    colors = OutlinedTextFieldDefaults.colors(
-                                                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                                        disabledContainerColor = MaterialTheme.colorScheme.surface,
-                                                        errorContainerColor = MaterialTheme.colorScheme.surface,
-                                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                                        errorBorderColor = MaterialTheme.colorScheme.error
-                                                    ),
-                                                    shape = RoundedCornerShape(28.dp),
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(56.dp)
-                                                        .onFocusChanged { isEmailSignInFocused = it.isFocused }
-                                                )
-
-                                                if (emailSignInError != null) {
-                                                    Text(
-                                                        text = emailSignInError!!,
-                                                        color = MaterialTheme.colorScheme.error,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        modifier = Modifier.padding(start = 16.dp)
-                                                    )
-                                                }
-
-                                                // Continue Button
-                                                androidx.compose.animation.AnimatedVisibility(
-                                                    visible = android.util.Patterns.EMAIL_ADDRESS.matcher(emailInput).matches(),
-                                                    enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(),
-                                                    exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut()
-                                                ) {
-                                                    Button(
-                                                        onClick = {
-                                                            verifyEmailAndNavigate(emailInput)
-                                                        },
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .height(56.dp),
-                                                        shape = RoundedCornerShape(28.dp),
-                                                        colors = ButtonDefaults.buttonColors(
-                                                            containerColor = MaterialTheme.colorScheme.primary,
-                                                            contentColor = MaterialTheme.colorScheme.onPrimary
-                                                        )
-                                                    ) {
-                                                        if (isLoading) {
-                                                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-                                                        } else {
-                                                            Text(
-                                                                text = if (isArabic) "متابعة" else "Continue",
-                                                                style = MaterialTheme.typography.titleMedium,
-                                                                fontWeight = FontWeight.Bold
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                2 -> {
-                                    // Short Sign Up Form (Name + Password)
-                                    Column(
-                                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            IconButton(onClick = { currentStep = 1 }) {
-                                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
-                                            }
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = if (isArabic) "إنشاء حساب" else "Create Account",
-                                                style = MaterialTheme.typography.titleLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                        
-                                        OutlinedTextField(
-                                            value = emailInput,
-                                            onValueChange = {},
-                                            readOnly = true,
-                                            label = { Text(if (isArabic) "البريد الإلكتروني" else "Email Address") },
-                                            leadingIcon = { Icon(Icons.Rounded.Email, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                            colors = OutlinedTextFieldDefaults.colors(
-                                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                                focusedBorderColor = Color.Transparent,
-                                                unfocusedBorderColor = Color.Transparent
-                                            ),
-                                            shape = RoundedCornerShape(28.dp),
-                                            modifier = Modifier.fillMaxWidth().height(56.dp)
-                                        )
-
-                                        OutlinedTextField(
-                                            value = nameInput,
-                                            onValueChange = { nameInput = it; nameSignUpError = null },
-                                            placeholder = { Text(if (isArabic) "الاسم الكامل" else "Full Name") },
-                                            leadingIcon = { Icon(Icons.Rounded.Person, null, tint = MaterialTheme.colorScheme.primary) },
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next),
-                                            singleLine = true,
-                                            isError = nameSignUpError != null,
-                                            colors = OutlinedTextFieldDefaults.colors(
-                                                focusedContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                unfocusedContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                disabledContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                errorContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                                                errorBorderColor = MaterialTheme.colorScheme.error
-                                            ),
-                                            shape = RoundedCornerShape(28.dp),
-                                            modifier = Modifier.fillMaxWidth().height(56.dp)
-                                        )
-                                        if (nameSignUpError != null) {
-                                            Text(text = nameSignUpError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 16.dp))
-                                        }
-
-                                        OutlinedTextField(
-                                            value = passwordInput,
-                                            onValueChange = { passwordInput = it; passwordSignUpError = null },
-                                            placeholder = { Text(if (isArabic) "كلمة المرور" else "Password") },
-                                            leadingIcon = { Icon(Icons.Rounded.Lock, null, tint = MaterialTheme.colorScheme.primary) },
-                                            trailingIcon = {
-                                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                                    Icon(if (passwordVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, tint = MaterialTheme.colorScheme.primary)
-                                                }
-                                            },
-                                            visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                                            singleLine = true,
-                                            isError = passwordSignUpError != null,
-                                            colors = OutlinedTextFieldDefaults.colors(
-                                                focusedContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                unfocusedContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                disabledContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                errorContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                                                errorBorderColor = MaterialTheme.colorScheme.error
-                                            ),
-                                            shape = RoundedCornerShape(28.dp),
-                                            modifier = Modifier.fillMaxWidth().height(56.dp)
-                                        )
-                                        if (passwordSignUpError != null) {
-                                            Text(text = passwordSignUpError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 16.dp))
-                                        }
-
-                                        Button(
-                                            onClick = {
-                                                if (nameInput.trim().isEmpty()) {
-                                                    nameSignUpError = if (isArabic) "الاسم مطلوب" else "Name is required"
-                                                    return@Button
-                                                }
-                                                if (passwordInput.length < 6) {
-                                                    passwordSignUpError = if (isArabic) "كلمة المرور قصيرة جداً (6 أحرف على الأقل)" else "Password too short (min 6 chars)"
-                                                    return@Button
-                                                }
-                                                scope.launch {
-                                                    isLoading = true
-                                                    try {
-                                                        val trimmedEmail = emailInput.trim()
-                                                        val trimmedName = nameInput.trim()
-                                                        val authResult = firebaseAuth.createUserWithEmailAndPassword(trimmedEmail, passwordInput).await()
-                                                        val user = authResult.user
-                                                        
-                                                        // Update Firebase display name in background
-                                                        val profileUpdates = com.google.firebase.auth.UserProfileChangeRequest.Builder()
-                                                            .setDisplayName(trimmedName)
-                                                            .build()
-                                                        user?.updateProfile(profileUpdates)
-                                                        
-                                                        // Fast local persistence & state activation
-                                                        settingsViewModel.registerUser(trimmedEmail, trimmedName, hashPassword(passwordInput))
-                                                        settingsViewModel.updateLoginState(true, "EMAIL", trimmedEmail, trimmedName, rememberMe)
-                                                        
-                                                        Toast.makeText(context, if (isArabic) "تم إنشاء الحساب بنجاح!" else "Account created successfully!", Toast.LENGTH_SHORT).show()
-                                                        onLoginSuccess()
-                                                    } catch (e: Exception) {
-                                                        android.util.Log.e("LoginScreen", "Firebase Sign Up Error", e)
-                                                        passwordSignUpError = when {
-                                                            e is com.google.firebase.auth.FirebaseAuthUserCollisionException -> {
-                                                                if (isArabic) "البريد الإلكتروني مسجل بالفعل، يرجى تسجيل الدخول" else "Email already registered, please sign in"
-                                                            }
-                                                            e is com.google.firebase.auth.FirebaseAuthWeakPasswordException -> {
-                                                                if (isArabic) "كلمة المرور ضعيفة جداً" else "Password is too weak"
-                                                            }
-                                                            e is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException -> {
-                                                                if (isArabic) "صيغة البريد الإلكتروني غير صحيحة" else "Invalid email format"
-                                                            }
-                                                            else -> e.localizedMessage ?: (if (isArabic) "فشل إنشاء الحساب" else "Sign up failed")
-                                                        }
-                                                    } finally {
-                                                        isLoading = false
-                                                    }
-                                                }
-                                            },
-                                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                                            shape = RoundedCornerShape(28.dp)
-                                        ) {
-                                            if (isLoading) {
-                                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-                                            } else {
-                                                Text(text = if (isArabic) "تسجيل حساب جديد" else "Create Account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                             }
                                         }
                                     }
-                                }
 
-                                3 -> {
-                                    // Password Login Screen
-                                    Column(
-                                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
+                                    2 -> {
+                                        // STEP 2: Create Account / Sign Up
+                                        Column(
+                                            verticalArrangement = Arrangement.spacedBy(14.dp),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            IconButton(onClick = { currentStep = 1 }) {
-                                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
-                                            }
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = if (isArabic) "مرحباً بعودتك" else "Welcome Back",
-                                                style = MaterialTheme.typography.titleLarge,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-
-                                        OutlinedTextField(
-                                            value = emailInput,
-                                            onValueChange = {},
-                                            readOnly = true,
-                                            label = { Text(if (isArabic) "البريد الإلكتروني" else "Email Address") },
-                                            leadingIcon = { Icon(Icons.Rounded.Email, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                            colors = OutlinedTextFieldDefaults.colors(
-                                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                                focusedBorderColor = Color.Transparent,
-                                                unfocusedBorderColor = Color.Transparent
-                                            ),
-                                            shape = RoundedCornerShape(28.dp),
-                                            modifier = Modifier.fillMaxWidth().height(56.dp)
-                                        )
-
-                                        OutlinedTextField(
-                                            value = passwordInput,
-                                            onValueChange = { passwordInput = it; passwordSignInError = null },
-                                            placeholder = { Text(if (isArabic) "كلمة المرور" else "Password") },
-                                            leadingIcon = { Icon(Icons.Rounded.Lock, null, tint = MaterialTheme.colorScheme.primary) },
-                                            trailingIcon = {
-                                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                                    Icon(if (passwordVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, tint = MaterialTheme.colorScheme.primary)
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                IconButton(onClick = { currentStep = 1 }) {
+                                                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = textPrimary)
                                                 }
-                                            },
-                                            visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                                            singleLine = true,
-                                            isError = passwordSignInError != null,
-                                            colors = OutlinedTextFieldDefaults.colors(
-                                                focusedContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                unfocusedContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                disabledContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                errorContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                                                errorBorderColor = MaterialTheme.colorScheme.error
-                                            ),
-                                            shape = RoundedCornerShape(28.dp),
-                                            modifier = Modifier.fillMaxWidth().height(56.dp)
-                                        )
-                                        if (passwordSignInError != null) {
-                                            Text(text = passwordSignInError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 16.dp))
-                                        }
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Checkbox(
-                                                    checked = rememberMe,
-                                                    onCheckedChange = { rememberMe = it },
-                                                    colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = if (isArabic) "إنشاء حساب جديد" else "Create account",
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    fontFamily = FontFamily.Serif,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = textPrimary
                                                 )
-                                                Text(text = if (isArabic) "تذكرني" else "Remember me", style = MaterialTheme.typography.bodyMedium)
                                             }
-                                            TextButton(onClick = { currentStep = 4 }) {
-                                                Text(text = if (isArabic) "نسيت كلمة المرور؟" else "Forgot password?", color = MaterialTheme.colorScheme.primary)
-                                            }
-                                        }
 
-                                        Button(
-                                            onClick = {
-                                                if (passwordInput.isEmpty()) {
-                                                    passwordSignInError = if (isArabic) "كلمة المرور مطلوبة" else "Password required"
-                                                    return@Button
-                                                }
-                                                scope.launch {
-                                                    isLoading = true
-                                                    try {
-                                                        val trimmedEmail = emailInput.trim()
-                                                        val authResult = firebaseAuth.signInWithEmailAndPassword(trimmedEmail, passwordInput).await()
-                                                        val user = authResult.user
-                                                        val displayName = user?.displayName ?: "User"
-                                                        
-                                                        val localUser = settingsViewModel.getUserByEmail(trimmedEmail)
-                                                        if (localUser == null) {
-                                                            settingsViewModel.registerUser(trimmedEmail, displayName, hashPassword(passwordInput))
-                                                        }
-                                                        settingsViewModel.updateLoginState(true, "EMAIL", trimmedEmail, displayName, rememberMe)
-                                                        
-                                                        Toast.makeText(context, if (isArabic) "مرحباً بك $displayName" else "Welcome, $displayName!", Toast.LENGTH_SHORT).show()
-                                                        onLoginSuccess()
-                                                    } catch (e: Exception) {
-                                                        android.util.Log.e("LoginScreen", "Firebase Sign In Error", e)
-                                                        passwordSignInError = e.localizedMessage ?: "Sign in failed"
-                                                    } finally {
-                                                        isLoading = false
-                                                    }
-                                                }
-                                            },
-                                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                                            shape = RoundedCornerShape(28.dp)
-                                        ) {
-                                            if (isLoading) {
-                                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-                                            } else {
-                                                Text(text = if (isArabic) "تسجيل الدخول" else "Sign In", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                4 -> {
-                                    // Forgot Password Screen
-                                    Column(
-                                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            IconButton(onClick = { currentStep = 1 }) {
-                                                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
-                                            }
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = if (isArabic) "نسيت كلمة المرور" else "Forgot Password",
-                                                style = MaterialTheme.typography.titleLarge,
-                                                fontWeight = FontWeight.Bold
+                                            // Email (Readonly)
+                                            OutlinedTextField(
+                                                value = emailInput,
+                                                onValueChange = {},
+                                                readOnly = true,
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedContainerColor = inputBgColor.copy(alpha = 0.5f),
+                                                    unfocusedContainerColor = inputBgColor.copy(alpha = 0.5f),
+                                                    focusedBorderColor = inputBorderColor,
+                                                    unfocusedBorderColor = inputBorderColor,
+                                                    focusedTextColor = textSecondary,
+                                                    unfocusedTextColor = textSecondary
+                                                ),
+                                                shape = RoundedCornerShape(24.dp),
+                                                modifier = Modifier.fillMaxWidth().height(52.dp)
                                             )
-                                        }
 
-                                        Text(
-                                            text = if (isArabic) "أدخل بريدك الإلكتروني وسيتم إرسال رابط إعادة التعيين." else "Enter your email address and a reset link will be sent.",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                            // Name
+                                            OutlinedTextField(
+                                                value = nameInput,
+                                                onValueChange = { nameInput = it; nameSignUpError = null },
+                                                placeholder = { Text(if (isArabic) "الاسم الكامل" else "Full name", color = textSecondary) },
+                                                singleLine = true,
+                                                isError = nameSignUpError != null,
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedContainerColor = inputBgColor,
+                                                    unfocusedContainerColor = inputBgColor,
+                                                    focusedBorderColor = Color(0xFF2563EB),
+                                                    unfocusedBorderColor = inputBorderColor,
+                                                    focusedTextColor = textPrimary,
+                                                    unfocusedTextColor = textPrimary
+                                                ),
+                                                shape = RoundedCornerShape(24.dp),
+                                                modifier = Modifier.fillMaxWidth().height(52.dp)
+                                            )
 
-                                        OutlinedTextField(
-                                            value = forgotEmailInput,
-                                            onValueChange = { forgotEmailInput = it },
-                                            label = { Text(if (isArabic) "البريد الإلكتروني" else "Email Address") },
-                                            leadingIcon = { Icon(Icons.Rounded.Email, null, tint = MaterialTheme.colorScheme.primary) },
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
-                                            singleLine = true,
-                                            colors = OutlinedTextFieldDefaults.colors(
-                                                focusedContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                unfocusedContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                disabledContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                errorContainerColor = if (androidx.compose.foundation.isSystemInDarkTheme()) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                                                errorBorderColor = MaterialTheme.colorScheme.error
-                                            ),
-                                            shape = RoundedCornerShape(28.dp),
-                                            modifier = Modifier.fillMaxWidth().height(56.dp)
-                                        )
+                                            if (nameSignUpError != null) {
+                                                Text(
+                                                    text = nameSignUpError!!,
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    modifier = Modifier.padding(start = 12.dp)
+                                                )
+                                            }
 
-                                        Button(
-                                            onClick = {
-                                                if (android.util.Patterns.EMAIL_ADDRESS.matcher(forgotEmailInput).matches()) {
+                                            // Password
+                                            OutlinedTextField(
+                                                value = passwordInput,
+                                                onValueChange = { passwordInput = it; passwordSignUpError = null },
+                                                placeholder = { Text(if (isArabic) "كلمة المرور (6 أحرف على الأقل)" else "Password (min 6 chars)", color = textSecondary) },
+                                                trailingIcon = {
+                                                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                                        Icon(if (passwordVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, tint = textSecondary)
+                                                    }
+                                                },
+                                                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                                singleLine = true,
+                                                isError = passwordSignUpError != null,
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedContainerColor = inputBgColor,
+                                                    unfocusedContainerColor = inputBgColor,
+                                                    focusedBorderColor = Color(0xFF2563EB),
+                                                    unfocusedBorderColor = inputBorderColor,
+                                                    focusedTextColor = textPrimary,
+                                                    unfocusedTextColor = textPrimary
+                                                ),
+                                                shape = RoundedCornerShape(24.dp),
+                                                modifier = Modifier.fillMaxWidth().height(52.dp)
+                                            )
+
+                                            if (passwordSignUpError != null) {
+                                                Text(
+                                                    text = passwordSignUpError!!,
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    modifier = Modifier.padding(start = 12.dp)
+                                                )
+                                            }
+
+                                            Button(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    if (nameInput.trim().isEmpty()) {
+                                                        nameSignUpError = if (isArabic) "يرجى إدخال الاسم الكامل" else "Please enter your name"
+                                                        return@Button
+                                                    }
+                                                    if (passwordInput.length < 6) {
+                                                        passwordSignUpError = if (isArabic) "كلمة المرور يجب أن لا تقل عن 6 أحرف" else "Password must be at least 6 characters"
+                                                        return@Button
+                                                    }
                                                     scope.launch {
                                                         isLoading = true
                                                         try {
-                                                            firebaseAuth.sendPasswordResetEmail(forgotEmailInput).await()
-                                                            Toast.makeText(context, if (isArabic) "تم إرسال رابط إعادة التعيين" else "Reset link sent", Toast.LENGTH_SHORT).show()
-                                                            currentStep = 1 // Go back to login
+                                                            val trimmedEmail = emailInput.trim()
+                                                            val trimmedName = nameInput.trim()
+                                                            val authResult = firebaseAuth.createUserWithEmailAndPassword(trimmedEmail, passwordInput).await()
+                                                            val user = authResult.user
+
+                                                            val profileUpdates = UserProfileChangeRequest.Builder()
+                                                                .setDisplayName(trimmedName)
+                                                                .build()
+                                                            user?.updateProfile(profileUpdates)
+
+                                                            settingsViewModel.registerUser(trimmedEmail, trimmedName, hashPassword(passwordInput))
+                                                            settingsViewModel.updateLoginState(true, "EMAIL", trimmedEmail, trimmedName, rememberMe)
+
+                                                            Toast.makeText(context, if (isArabic) "تم إنشاء الحساب بنجاح!" else "Account created successfully!", Toast.LENGTH_SHORT).show()
+                                                            onLoginSuccess()
                                                         } catch (e: Exception) {
-                                                            Toast.makeText(context, e.localizedMessage, Toast.LENGTH_SHORT).show()
+                                                            passwordSignUpError = e.localizedMessage ?: "Sign up failed"
                                                         } finally {
                                                             isLoading = false
                                                         }
                                                     }
+                                                },
+                                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                                shape = RoundedCornerShape(26.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = Color(0xFF2563EB),
+                                                    contentColor = Color.White
+                                                )
+                                            ) {
+                                                if (isLoading) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
                                                 } else {
-                                                    Toast.makeText(context, if (isArabic) "بريد إلكتروني غير صالح" else "Invalid email", Toast.LENGTH_SHORT).show()
+                                                    Text(text = if (isArabic) "إنشاء الحساب" else "Create Account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                                                 }
-                                            },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(56.dp),
-                                            shape = RoundedCornerShape(28.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = MaterialTheme.colorScheme.primary,
-                                                contentColor = MaterialTheme.colorScheme.onPrimary
-                                            )
+                                            }
+                                        }
+                                    }
+
+                                    3 -> {
+                                        // STEP 3: Password Sign In
+                                        Column(
+                                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                                            modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            if (isLoading) {
-                                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-                                            } else {
-                                                Text(text = if (isArabic) "إرسال الرابط" else "Send Link", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                IconButton(onClick = { currentStep = 1 }) {
+                                                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = textPrimary)
+                                                }
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = if (isArabic) "مرحباً بعودتك" else "Welcome back",
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    fontFamily = FontFamily.Serif,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = textPrimary
+                                                )
+                                            }
+
+                                            // Email (Readonly)
+                                            OutlinedTextField(
+                                                value = emailInput,
+                                                onValueChange = {},
+                                                readOnly = true,
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedContainerColor = inputBgColor.copy(alpha = 0.5f),
+                                                    unfocusedContainerColor = inputBgColor.copy(alpha = 0.5f),
+                                                    focusedBorderColor = inputBorderColor,
+                                                    unfocusedBorderColor = inputBorderColor,
+                                                    focusedTextColor = textSecondary,
+                                                    unfocusedTextColor = textSecondary
+                                                ),
+                                                shape = RoundedCornerShape(24.dp),
+                                                modifier = Modifier.fillMaxWidth().height(52.dp)
+                                            )
+
+                                            // Password
+                                            OutlinedTextField(
+                                                value = passwordInput,
+                                                onValueChange = { passwordInput = it; passwordSignInError = null },
+                                                placeholder = { Text(if (isArabic) "أدخل كلمة المرور" else "Enter password", color = textSecondary) },
+                                                trailingIcon = {
+                                                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                                        Icon(if (passwordVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff, null, tint = textSecondary)
+                                                    }
+                                                },
+                                                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                                singleLine = true,
+                                                isError = passwordSignInError != null,
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedContainerColor = inputBgColor,
+                                                    unfocusedContainerColor = inputBgColor,
+                                                    focusedBorderColor = Color(0xFF2563EB),
+                                                    unfocusedBorderColor = inputBorderColor,
+                                                    focusedTextColor = textPrimary,
+                                                    unfocusedTextColor = textPrimary
+                                                ),
+                                                shape = RoundedCornerShape(24.dp),
+                                                modifier = Modifier.fillMaxWidth().height(52.dp)
+                                            )
+
+                                            if (passwordSignInError != null) {
+                                                Text(
+                                                    text = passwordSignInError!!,
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    modifier = Modifier.padding(start = 12.dp)
+                                                )
+                                            }
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End
+                                            ) {
+                                                Text(
+                                                    text = if (isArabic) "نسيت كلمة المرور؟" else "Forgot password?",
+                                                    color = Color(0xFF2563EB),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Medium,
+                                                    modifier = Modifier.clickable {
+                                                        forgotEmailInput = emailInput
+                                                        currentStep = 4
+                                                    }
+                                                )
+                                            }
+
+                                            Button(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    if (passwordInput.isEmpty()) {
+                                                        passwordSignInError = if (isArabic) "يرجى إدخال كلمة المرور" else "Please enter password"
+                                                        return@Button
+                                                    }
+                                                    scope.launch {
+                                                        isLoading = true
+                                                        try {
+                                                            val trimmedEmail = emailInput.trim()
+                                                            val localUser = settingsViewModel.getUserByEmail(trimmedEmail)
+                                                            if (localUser != null && localUser.passwordHash == hashPassword(passwordInput)) {
+                                                                settingsViewModel.updateLoginState(true, "EMAIL", trimmedEmail, localUser.name, rememberMe)
+                                                                Toast.makeText(context, if (isArabic) "تم تسجيل الدخول بنجاح" else "Logged in successfully!", Toast.LENGTH_SHORT).show()
+                                                                onLoginSuccess()
+                                                                return@launch
+                                                            }
+
+                                                            val authResult = firebaseAuth.signInWithEmailAndPassword(trimmedEmail, passwordInput).await()
+                                                            val user = authResult.user
+                                                            val displayName = user?.displayName ?: trimmedEmail.substringBefore("@")
+                                                            settingsViewModel.updateLoginState(true, "EMAIL", trimmedEmail, displayName, rememberMe)
+                                                            Toast.makeText(context, if (isArabic) "تم تسجيل الدخول بنجاح" else "Logged in successfully!", Toast.LENGTH_SHORT).show()
+                                                            onLoginSuccess()
+                                                        } catch (e: Exception) {
+                                                            passwordSignInError = if (isArabic) "كلمة المرور غير صحيحة أو الحساب غير موجود" else "Invalid password or account does not exist"
+                                                        } finally {
+                                                            isLoading = false
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                                shape = RoundedCornerShape(26.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = Color(0xFF2563EB),
+                                                    contentColor = Color.White
+                                                )
+                                            ) {
+                                                if (isLoading) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                                                } else {
+                                                    Text(text = if (isArabic) "تسجيل الدخول" else "Sign In", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    4 -> {
+                                        // STEP 4: Forgot Password
+                                        Column(
+                                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                IconButton(onClick = { currentStep = 3 }) {
+                                                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = textPrimary)
+                                                }
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = if (isArabic) "استعادة كلمة المرور" else "Reset Password",
+                                                    style = MaterialTheme.typography.titleLarge,
+                                                    fontFamily = FontFamily.Serif,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = textPrimary
+                                                )
+                                            }
+
+                                            Text(
+                                                text = if (isArabic) "أدخل بريدك الإلكتروني لإرسال رابط إعادة التعيين" else "Enter your email to receive a password reset link",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = textSecondary
+                                            )
+
+                                            OutlinedTextField(
+                                                value = forgotEmailInput,
+                                                onValueChange = { forgotEmailInput = it; forgotPasswordError = null },
+                                                placeholder = { Text(if (isArabic) "البريد الإلكتروني" else "Email", color = textSecondary) },
+                                                singleLine = true,
+                                                isError = forgotPasswordError != null,
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedContainerColor = inputBgColor,
+                                                    unfocusedContainerColor = inputBgColor,
+                                                    focusedBorderColor = Color(0xFF2563EB),
+                                                    unfocusedBorderColor = inputBorderColor,
+                                                    focusedTextColor = textPrimary,
+                                                    unfocusedTextColor = textPrimary
+                                                ),
+                                                shape = RoundedCornerShape(24.dp),
+                                                modifier = Modifier.fillMaxWidth().height(52.dp)
+                                            )
+
+                                            if (forgotPasswordError != null) {
+                                                Text(
+                                                    text = forgotPasswordError!!,
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    modifier = Modifier.padding(start = 12.dp)
+                                                )
+                                            }
+
+                                            if (resetEmailSent) {
+                                                Text(
+                                                    text = if (isArabic) "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك!" else "Reset link has been sent to your email!",
+                                                    color = Color(0xFF16A34A),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Medium,
+                                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                                )
+                                            }
+
+                                            Button(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(forgotEmailInput.trim()).matches()) {
+                                                        forgotPasswordError = if (isArabic) "يرجى إدخال بريد إلكتروني صحيح" else "Please enter a valid email"
+                                                        return@Button
+                                                    }
+                                                    scope.launch {
+                                                        isLoading = true
+                                                        try {
+                                                            firebaseAuth.sendPasswordResetEmail(forgotEmailInput.trim()).await()
+                                                            resetEmailSent = true
+                                                        } catch (e: Exception) {
+                                                            forgotPasswordError = e.localizedMessage ?: "Failed to send reset email"
+                                                        } finally {
+                                                            isLoading = false
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                                shape = RoundedCornerShape(26.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = Color(0xFF2563EB),
+                                                    contentColor = Color.White
+                                                )
+                                            ) {
+                                                if (isLoading) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                                                } else {
+                                                    Text(
+                                                        text = if (isArabic) "إرسال الرابط" else "Send Link",
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-                }
-
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-
-        // Full Screen Loading overlay
-        if (isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable(enabled = false) {},
-                contentAlignment = Alignment.Center
-            ) {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Text(
-                            text = if (isArabic) "جاري العمل بشكل آمن..." else "Working securely...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
                     }
                 }
             }

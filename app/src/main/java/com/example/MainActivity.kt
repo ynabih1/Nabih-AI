@@ -71,21 +71,13 @@ class MainActivity : ComponentActivity() {
         }
 
 
-        val diagnosticErrors = mutableListOf<String>()
-
-        // Check Firebase config
+        // Check Firebase config (logged as warnings, non-blocking)
         try {
             if (FirebaseApp.getApps(this).isEmpty()) {
-                diagnosticErrors.add("Firebase configuration missing or invalid. Check google-services.json.")
+                android.util.Log.w("MainActivity", "Firebase configuration missing or invalid. Check google-services.json.")
             }
         } catch (e: Exception) {
-            diagnosticErrors.add("Firebase initialization failed: ${e.message}")
-        }
-
-        // Check Gemini API Key
-        val geminiKey = BuildConfig.GEMINI_API_KEY
-        if (geminiKey.isEmpty() || geminiKey == "MY_GEMINI_API_KEY" || geminiKey.contains("YOUR_") || geminiKey.contains("PLACEHOLDER")) {
-            diagnosticErrors.add("Gemini API Key is missing or invalid. Check your .env file.")
+            android.util.Log.w("MainActivity", "Firebase initialization log: ${e.message}")
         }
 
         // Get dependencies container
@@ -114,15 +106,12 @@ class MainActivity : ComponentActivity() {
                 }
                 NabihTheme(darkTheme = darkTheme, isArabic = settings.language == AppLanguage.ARABIC) {
                     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        if (diagnosticErrors.isNotEmpty()) {
-                            DiagnosticScreen(errors = diagnosticErrors)
-                        } else {
-                            val navController = rememberNavController()
+                        val navController = rememberNavController()
 
-                            NavHost(
-                                navController = navController,
-                                startDestination = if (settings.isLoggedIn) "home" else "login"
-                            ) {
+                        NavHost(
+                            navController = navController,
+                            startDestination = if (settings.isLoggedIn) "home" else "login"
+                        ) {
                             // Onboarding and Premium Sign-in
                             composable("login") {
                                 LoginScreen(
@@ -203,7 +192,6 @@ class MainActivity : ComponentActivity() {
                             composable("help") {
                                 HelpScreen(onNavigateBack = { navController.popBackStack() }, isArabic = settings.language == AppLanguage.ARABIC)
                             }
-                        }
                         }
                     }
                 }

@@ -16,10 +16,14 @@ class NabihApplication : Application() {
         super.onCreate()
         container = DefaultAppContainer(this)
         
-        Firebase.initialize(context = this)
-        Firebase.appCheck.installAppCheckProviderFactory(
-            PlayIntegrityAppCheckProviderFactory.getInstance()
-        )
+        try {
+            Firebase.initialize(context = this)
+            Firebase.appCheck.installAppCheckProviderFactory(
+                PlayIntegrityAppCheckProviderFactory.getInstance()
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("NabihApplication", "Firebase/AppCheck init skipped or deferred: ${e.message}")
+        }
 
         // Migrate any leftover unencrypted fallback keys to encrypted storage
         com.example.utils.SecureStorage(this).migratePlaintextKeysToEncrypted()
