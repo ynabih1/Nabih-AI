@@ -496,6 +496,62 @@ class ChatViewModel(
         }
     }
 
+    fun regenerateAiResponse(messageId: String) {
+        val convId = _activeConversationId.value ?: return
+        viewModelScope.launch {
+            stopGeneration()
+            val messages = chatRepository.getMessagesForConversation(convId).first()
+            val targetIndex = messages.indexOfFirst { it.id == messageId }
+            if (targetIndex == -1) return@launch
+
+            // If it's a model message, find the preceding user message
+            val lastUserMsg = if (messages[targetIndex].role == "model") {
+                messages.subList(0, targetIndex).lastOrNull { it.role == "user" }
+            } else {
+                messages[targetIndex]
+            } ?: return@launch
+
+            // Delete the current model message and any messages after it
+            val deleteStartIndex = if (messages[targetIndex].role == "model") targetIndex else targetIndex + 1
+            for (i in deleteStartIndex until messages.size) {
+                chatRepository.deleteMessageById(messages[i].id)
+            }
+
+            _isGenerating.value = true
+            _currentStreamingResponse.value = ""
+
+            val activePrompt = lastUserMsg.content
+            val currentReasoning = _reasoningMode.value
+
+            streamingJob = viewModelScope.launch {
+                chatRepository.streamChatResponse(
+                    conversationId = convId,
+                    prompt = activePrompt,
+                    attachedImageUri = lastUserMsg.imageUri?.let { Uri.parse(it) },
+                    attachedDocUri = lastUserMsg.documentUri?.let { Uri.parse(it) },
+                    searchEnabled = _searchEnabled.value,
+                    reasoningMode = currentReasoning
+                ).onCompletion { err ->
+                    _isGenerating.value = false
+                    val responseText = _currentStreamingResponse.value
+                    if (responseText.isNotEmpty()) {
+                        saveMessage(convId, "model", responseText)
+                        if (settingsRepository.settings.value.completionNotifications) {
+                            val title = if (settingsRepository.settings.value.language == com.example.models.AppLanguage.ARABIC) "اكتمل الرد" else "Response Completed"
+                            val msg = if (settingsRepository.settings.value.language == com.example.models.AppLanguage.ARABIC) "أنهى Nabih Ultra إجابته." else "Nabih Ultra has finished answering."
+                            notificationHelper.showCompletionNotification(title, msg, convId)
+                        }
+                    }
+                    _currentStreamingResponse.value = ""
+                }.catch { e ->
+                    handleError(e, convId)
+                }.collect { chunk ->
+                    _currentStreamingResponse.value = chunk
+                }
+            }
+        }
+    }
+
     fun editUserMessageAndRegenerate(messageId: String, newContent: String) {
         val convId = _activeConversationId.value ?: return
         if (newContent.isBlank()) return
@@ -591,4 +647,21 @@ class ChatViewModel(
             ""
         }
     }
+
+    fun saveFeedback(
+        messageId: String,
+        isPositive: Boolean,
+        category: String? = null,
+        details: String? = null
+    ) {
+        viewModelScope.launch {
+            chatRepository.insertFeedback(
+                messageId = messageId,
+                isPositive = isPositive,
+                category = category,
+                details = details
+            )
+        }
+    }
 }
+

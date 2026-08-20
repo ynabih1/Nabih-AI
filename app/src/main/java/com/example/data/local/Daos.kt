@@ -131,3 +131,16 @@ interface ErrorLogDao {
     suspend fun clearAllErrorLogs()
 }
 
+@Dao
+interface FeedbackDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFeedback(feedback: MessageFeedback)
+
+    @Query("SELECT * FROM message_feedback WHERE messageId = :messageId ORDER BY timestamp DESC")
+    fun getFeedbackForMessage(messageId: String): Flow<List<MessageFeedback>>
+
+    @Query("SELECT * FROM message_feedback ORDER BY timestamp DESC")
+    fun getAllFeedback(): Flow<List<MessageFeedback>>
+}
+
+

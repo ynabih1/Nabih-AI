@@ -13,7 +13,7 @@ import com.google.firebase.Firebase
 import com.google.firebase.remoteconfig.remoteConfig
 import kotlinx.coroutines.tasks.await
 
-private var cachedGeminiModelName: String = "gemini-2.0-flash"
+private var cachedGeminiModelName: String = "gemini-2.5-flash"
 
 fun getCurrentGeminiModelName(): String {
     return cachedGeminiModelName
@@ -22,7 +22,7 @@ fun getCurrentGeminiModelName(): String {
 fun initRemoteConfigAsync() {
     try {
         val remoteConfig = Firebase.remoteConfig
-        remoteConfig.setDefaultsAsync(mapOf("gemini_model_name" to "gemini-2.0-flash"))
+        remoteConfig.setDefaultsAsync(mapOf("gemini_model_name" to "gemini-2.5-flash"))
         remoteConfig.fetchAndActivate().addOnSuccessListener {
             val fetched = remoteConfig.getString("gemini_model_name")
             if (fetched.isNotBlank()) {
@@ -61,7 +61,7 @@ interface AiProvider {
     ): Flow<String>
 }
 
-// --- 2. Gemini / Nabih Ultra Provider Implementation ---
+// --- 2. Gemini / Nabih Ultra Provider Implementation (Direct REST API via Retrofit) ---
 class GeminiProvider : AiProvider {
     override suspend fun generateResponse(
         modelId: String,
@@ -99,11 +99,22 @@ class GeminiProvider : AiProvider {
         val req = GeminiRequest(
             contents = contents,
             systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = systemPrompt))),
-            generationConfig = GeminiGenerationConfig(temperature = 0.7f)
+            generationConfig = GeminiGenerationConfig(temperature = 0.7f),
+            tools = listOf(GeminiTool())
         )
 
         val response = NetworkClient.geminiService.generateContent(modelId, apiKey, req)
-        return response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: throw Exception("رد فارغ من الموديل")
+        val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: throw Exception("رد فارغ من الموديل")
+        
+        // Append grounding sources if available
+        val chunks = response.candidates?.firstOrNull()?.groundingMetadata?.groundingChunks
+        val webSources = chunks?.mapNotNull { it.web }?.filter { !it.uri.isNullOrBlank() }?.distinctBy { it.uri }
+        return if (!webSources.isNullOrEmpty()) {
+            val sourcesFormatted = webSources.joinToString("\n") { "• [${it.title ?: "المصدر"}](${it.uri})" }
+            "$text\n\n**المصادر:**\n$sourcesFormatted"
+        } else {
+            text
+        }
     }
 
     override fun generateResponseStream(
@@ -142,7 +153,8 @@ class GeminiProvider : AiProvider {
         val req = GeminiRequest(
             contents = contents,
             systemInstruction = GeminiContent(parts = listOf(GeminiPart(text = systemPrompt))),
-            generationConfig = GeminiGenerationConfig(temperature = 0.7f)
+            generationConfig = GeminiGenerationConfig(temperature = 0.7f),
+            tools = listOf(GeminiTool())
         )
 
         try {
@@ -257,10 +269,11 @@ object AiRouter {
         val defaultRemoteModel = getCurrentGeminiModelName()
         val modelsToTry = linkedSetOf(
             defaultRemoteModel,
-            "gemini-2.0-flash",
             "gemini-2.5-flash",
+            "gemini-2.0-flash",
             "gemini-1.5-flash",
             "gemini-1.5-pro",
+            "gemini-2.5-pro",
             "gemini-3.7-flash"
         ).toList()
 

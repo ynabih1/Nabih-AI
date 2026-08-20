@@ -633,11 +633,19 @@ fun MainScreen(
                                         message = message,
                                         isArabic = isArabic,
                                         isStreaming = false,
-                                        onRetry = { chatViewModel.retryLastResponse() },
+                                        onRetry = { chatViewModel.regenerateAiResponse(message.id) },
                                         alternativeModel = chatViewModel.getAlternativeModel(),
                                         onRetryWithAlternative = { alt -> chatViewModel.retryWithAlternativeModel(alt) },
                                         onDelete = { chatViewModel.deleteMessage(message.id) },
                                         onEdit = { newContent -> chatViewModel.editUserMessageAndRegenerate(message.id, newContent) },
+                                        onFeedback = { isPositive, category, details ->
+                                            chatViewModel.saveFeedback(
+                                                messageId = message.id,
+                                                isPositive = isPositive,
+                                                category = category,
+                                                details = details
+                                            )
+                                        },
                                         onShowFeedbackSuccess = {
                                             scope.launch {
                                                 snackbarHostState.showSnackbar(if (isArabic) "شكرًا لك على ملاحظاتك." else "Thank you for your feedback.")
@@ -985,73 +993,68 @@ fun MarkdownText(content: String, isArabic: Boolean) {
 @Composable
 fun AiResponseToolbar(
     isArabic: Boolean,
+    messageId: String,
     content: String,
+    onRetry: () -> Unit = {},
     onDelete: () -> Unit,
     onEditClick: () -> Unit,
+    onFeedback: (isPositive: Boolean, category: String?, details: String?) -> Unit,
     onShowFeedbackSuccess: () -> Unit
 ) {
     val context = LocalContext.current
     var reaction by remember { mutableStateOf<Boolean?>(null) } // true = like, false = dislike
     var showFeedbackSheet by remember { mutableStateOf(false) }
-    var isSpeaking by remember { mutableStateOf(false) }
-
-    // Clean markdown symbols for speech synthesis
-    val cleanSpeechText = remember(content) {
-        content.replace(Regex("[#*_`~>\\[\\]()]"), "").trim()
-    }
+    var showPositiveFeedbackSheet by remember { mutableStateOf(false) }
 
     if (showFeedbackSheet) {
         FeedbackBottomSheet(
             isArabic = isArabic,
             onDismiss = { showFeedbackSheet = false },
-            onSubmit = {
+            onSubmit = { category, details ->
                 showFeedbackSheet = false
+                onFeedback(false, category, details.ifBlank { null })
                 onShowFeedbackSuccess()
             }
         )
     }
 
+    if (showPositiveFeedbackSheet) {
+        PositiveFeedbackBottomSheet(
+            isArabic = isArabic,
+            onDismiss = { showPositiveFeedbackSheet = false },
+            onSubmit = { details ->
+                showPositiveFeedbackSheet = false
+                onFeedback(true, null, details.ifBlank { null })
+                onShowFeedbackSuccess()
+            }
+        )
+    }
+
+    // Claude style bottom toolbar: [Refresh/Retry] [Dislike] [Like] [Share] [Copy]
+    // Clean minimalist borderless icon buttons with consistent subtle styling
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 4.dp, start = 4.dp, end = 4.dp),
+            .padding(top = 6.dp, start = 2.dp, end = 2.dp),
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Copy Button
+        // 1. Refresh / Regenerate Button (↺)
         IconButton(
-            onClick = {
-                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val clip = android.content.ClipData.newPlainText("Copied Text", content)
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(context, if (isArabic) "تم نسخ النص" else "Copied to clipboard", Toast.LENGTH_SHORT).show()
-            },
-            modifier = Modifier.size(36.dp)
+            onClick = onRetry,
+            modifier = Modifier.size(32.dp)
         ) {
             Icon(
-                imageVector = Icons.Rounded.ContentCopy,
-                contentDescription = "Copy",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(16.dp)
+                imageVector = Icons.Rounded.Refresh,
+                contentDescription = if (isArabic) "إعادة التوليد" else "Regenerate",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.size(17.dp)
             )
         }
-        
-        // Like Button
-        IconButton(
-            onClick = {
-                reaction = if (reaction == true) null else true
-            },
-            modifier = Modifier.size(36.dp)
-        ) {
-            Icon(
-                imageVector = if (reaction == true) Icons.Rounded.ThumbUp else Icons.Outlined.ThumbUp,
-                contentDescription = "Like",
-                tint = if (reaction == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(16.dp)
-            )
-        }
-        
-        // Dislike Button
+
+        Spacer(modifier = Modifier.width(2.dp))
+
+        // 2. Dislike Button (👎)
         IconButton(
             onClick = {
                 val newReaction = if (reaction == false) null else false
@@ -1060,17 +1063,40 @@ fun AiResponseToolbar(
                     showFeedbackSheet = true
                 }
             },
-            modifier = Modifier.size(36.dp)
+            modifier = Modifier.size(32.dp)
         ) {
             Icon(
                 imageVector = if (reaction == false) Icons.Rounded.ThumbDown else Icons.Outlined.ThumbDown,
-                contentDescription = "Dislike",
-                tint = if (reaction == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(16.dp)
+                contentDescription = if (isArabic) "عدم إعجاب" else "Dislike",
+                tint = if (reaction == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.size(17.dp)
             )
         }
-        
-        // Share Button
+
+        Spacer(modifier = Modifier.width(2.dp))
+
+        // 3. Like Button (👍)
+        IconButton(
+            onClick = {
+                val newReaction = if (reaction == true) null else true
+                reaction = newReaction
+                if (newReaction == true) {
+                    showPositiveFeedbackSheet = true
+                }
+            },
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = if (reaction == true) Icons.Rounded.ThumbUp else Icons.Outlined.ThumbUp,
+                contentDescription = if (isArabic) "إعجاب" else "Like",
+                tint = if (reaction == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.size(17.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(2.dp))
+
+        // 4. Share Button (⤴ / Share)
         IconButton(
             onClick = {
                 val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -1079,17 +1105,38 @@ fun AiResponseToolbar(
                 }
                 context.startActivity(android.content.Intent.createChooser(intent, null))
             },
-            modifier = Modifier.size(36.dp)
+            modifier = Modifier.size(32.dp)
         ) {
             Icon(
                 imageVector = Icons.Rounded.Share,
-                contentDescription = "Share",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(16.dp)
+                contentDescription = if (isArabic) "مشاركة" else "Share",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.size(17.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(2.dp))
+
+        // 5. Copy Button (⧉)
+        IconButton(
+            onClick = {
+                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("Copied Text", content)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(context, if (isArabic) "تم نسخ النص" else "Copied to clipboard", Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.ContentCopy,
+                contentDescription = if (isArabic) "نسخ" else "Copy",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.size(17.dp)
             )
         }
     }
 }
+
 
 fun openDocumentExternally(
     context: android.content.Context,
@@ -1308,6 +1355,7 @@ fun MessageItem(
     onRetryWithAlternative: (com.example.models.AiModel) -> Unit = {},
     onDelete: () -> Unit = {},
     onEdit: (String) -> Unit = {},
+    onFeedback: (isPositive: Boolean, category: String?, details: String?) -> Unit = { _, _, _ -> },
     onShowFeedbackSuccess: () -> Unit = {}
 ) {
     val isUser = message.role == "user"
@@ -1784,12 +1832,15 @@ fun MessageItem(
                     }
                 }
 
-                if (!isLoading && !isErrorMsg) {
+                if (!isLoading && !isStreaming && !isErrorMsg) {
                     AiResponseToolbar(
                         isArabic = isArabic,
+                        messageId = message.id,
                         content = message.content,
+                        onRetry = onRetry,
                         onDelete = onDelete,
                         onEditClick = { showEditDialog = true },
+                        onFeedback = onFeedback,
                         onShowFeedbackSuccess = onShowFeedbackSuccess
                     )
                 }

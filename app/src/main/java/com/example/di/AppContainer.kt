@@ -44,6 +44,7 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             messageDao = database.messageDao(),
             memoryDao = database.memoryDao(),
             errorLogDao = database.errorLogDao(),
+            feedbackDao = database.feedbackDao(),
             settingsRepository = settingsRepository
         )
     }

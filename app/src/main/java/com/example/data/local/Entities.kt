@@ -68,4 +68,15 @@ data class ErrorLog(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "message_feedback")
+data class MessageFeedback(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val messageId: String,
+    val isPositive: Boolean,       // true = like, false = dislike
+    val category: String? = null,  // only for dislike
+    val details: String? = null,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+
 

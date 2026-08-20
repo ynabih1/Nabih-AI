@@ -30,10 +30,16 @@ data class GeminiContent(
     val parts: List<GeminiPart>
 )
 
+data class GeminiTool(
+    @Json(name = "google_search") val google_search: Map<String, String>? = null,
+    val googleSearch: Map<String, String> = emptyMap()
+)
+
 data class GeminiRequest(
     val contents: List<GeminiContent>,
     val systemInstruction: GeminiContent? = null,
-    val generationConfig: GeminiGenerationConfig? = null
+    val generationConfig: GeminiGenerationConfig? = null,
+    val tools: List<GeminiTool>? = null
 )
 
 data class GeminiImageConfig(
@@ -48,12 +54,28 @@ data class GeminiGenerationConfig(
     val imageConfig: GeminiImageConfig? = null
 )
 
+data class GeminiGroundingChunkWeb(
+    val uri: String? = null,
+    val title: String? = null
+)
+
+data class GeminiGroundingChunk(
+    val web: GeminiGroundingChunkWeb? = null
+)
+
+data class GeminiGroundingMetadata(
+    val webSearchQueries: List<String>? = null,
+    val searchEntryPoint: Map<String, Any>? = null,
+    val groundingChunks: List<GeminiGroundingChunk>? = null
+)
+
 data class GeminiResponse(
     val candidates: List<GeminiCandidate>?
 )
 
 data class GeminiCandidate(
-    val content: GeminiContent?
+    val content: GeminiContent?,
+    val groundingMetadata: GeminiGroundingMetadata? = null
 )
 
 data class GeminiModel(
